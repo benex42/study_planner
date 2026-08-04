@@ -5,6 +5,67 @@ import 'package:flutter/material.dart';
 /// Shared curve for the floating navigation and all elevated page cards.
 const appSurfaceBorderRadius = BorderRadius.all(Radius.circular(28));
 
+/// A translucent, softly blurred surface used for floating UI elements.
+class FrostedGlassSurface extends StatelessWidget {
+  const FrostedGlassSurface({
+    super.key,
+    required this.child,
+    this.padding,
+    this.borderRadius = appSurfaceBorderRadius,
+    this.blurSigma = 18,
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+  final BorderRadius borderRadius;
+  final double blurSigma;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: borderRadius,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? .32 : .14),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: borderRadius,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: borderRadius,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: isDark
+                    ? const [Color(0xB31E2935), Color(0x99131B25)]
+                    : const [Color(0xB3FFFFFF), Color(0x99EAF3FF)],
+              ),
+              border: Border.all(
+                color: isDark
+                    ? const Color(0x4DFFFFFF)
+                    : const Color(0x73FFFFFF),
+                width: .5,
+              ),
+            ),
+            child: padding == null
+                ? child
+                : Padding(padding: padding!, child: child),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class FloatingTabItem {
   const FloatingTabItem({
     required this.label,
@@ -40,53 +101,21 @@ class FloatingTabBar extends StatelessWidget {
     return SafeArea(
       top: false,
       minimum: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-      child: Container(
+      child: SizedBox(
         height: 68,
-        decoration: BoxDecoration(
-          borderRadius: appSurfaceBorderRadius,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? .32 : .14),
-              blurRadius: 24,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: appSurfaceBorderRadius,
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: appSurfaceBorderRadius,
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: isDark
-                      ? const [Color(0xB31E2935), Color(0x99131B25)]
-                      : const [Color(0xB3FFFFFF), Color(0x99EAF3FF)],
+        child: FrostedGlassSurface(
+          child: Row(
+            children: [
+              for (var index = 0; index < items.length; index++)
+                Expanded(
+                  child: _FloatingTab(
+                    item: items[index],
+                    selected: index == selectedIndex,
+                    foreground: foreground,
+                    onTap: () => onDestinationSelected(index),
+                  ),
                 ),
-                border: Border.all(
-                  color: isDark
-                      ? const Color(0x80FFFFFF)
-                      : const Color(0xB3FFFFFF),
-                  width: .5,
-                ),
-              ),
-              child: Row(
-                children: [
-                  for (var index = 0; index < items.length; index++)
-                    Expanded(
-                      child: _FloatingTab(
-                        item: items[index],
-                        selected: index == selectedIndex,
-                        foreground: foreground,
-                        onTap: () => onDestinationSelected(index),
-                      ),
-                    ),
-                ],
-              ),
-            ),
+            ],
           ),
         ),
       ),

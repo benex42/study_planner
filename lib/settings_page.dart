@@ -67,8 +67,6 @@ class _SettingsPageState extends State<SettingsPage> {
                     surface: surface,
                     primary: primary,
                     secondary: secondary,
-                    divider: divider,
-                    onEdit: () => _showMessage('Profile editing selected.'),
                   ),
                   const SizedBox(height: 18),
                   _SettingsSection(
@@ -261,108 +259,69 @@ class _ProfileCard extends StatelessWidget {
     required this.surface,
     required this.primary,
     required this.secondary,
-    required this.divider,
-    required this.onEdit,
   });
 
   final Color surface;
   final Color primary;
   final Color secondary;
-  final Color divider;
-  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 17),
+      height: 108,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       decoration: BoxDecoration(
         color: surface,
         borderRadius: appSurfaceBorderRadius,
-        border: Border.all(color: divider, width: .5),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x0A000000),
-            blurRadius: 9,
-            offset: Offset(0, 3),
+            color: Color(0x12000000),
+            blurRadius: 10,
+            offset: Offset(0, 2),
           ),
         ],
       ),
-      child: Column(
+      child: Row(
         children: [
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Container(
-                width: 69,
-                height: 69,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFF0871C9), width: 3),
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFFF2C69C), Color(0xFF9CC8E4)],
-                  ),
-                ),
-                child: const Icon(
-                  Icons.face_rounded,
-                  color: Color(0xFF65504B),
-                  size: 48,
-                ),
+          Container(
+            width: 68,
+            height: 68,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFFB68968), Color(0xFF4B3028)],
               ),
-              Positioned(
-                right: -2,
-                bottom: -1,
-                child: Container(
-                  width: 27,
-                  height: 27,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0568B9),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                  ),
-                  child: const Icon(
-                    Icons.edit_rounded,
-                    color: Colors.white,
-                    size: 15,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'Aaron Rivers',
-            style: TextStyle(
-              color: primary,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
+            ),
+            child: const Icon(
+              Icons.person_rounded,
+              color: Color(0xFFF5DED0),
+              size: 47,
             ),
           ),
-          const SizedBox(height: 2),
-          Text(
-            'aaron.rivers@university.edu',
-            style: TextStyle(color: secondary, fontSize: 12),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 30,
-            child: FilledButton(
-              onPressed: onEdit,
-              style: FilledButton.styleFrom(
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                backgroundColor: const Color(0xFFBFE3FF),
-                foregroundColor: const Color(0xFF526D83),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(6),
+          const SizedBox(width: 17),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Aaron Rivers',
+                  style: TextStyle(
+                    color: primary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-                textStyle: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
+                const SizedBox(height: 5),
+                Text(
+                  'aaron.rivers@university.edu',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: secondary, fontSize: 13),
                 ),
-              ),
-              child: const Text('Edit Profile'),
+              ],
             ),
           ),
         ],

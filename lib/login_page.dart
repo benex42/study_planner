@@ -159,23 +159,9 @@ class _LoginCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
+    return FrostedGlassSurface(
       padding: const EdgeInsets.fromLTRB(33, 35, 33, 32),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1B2632) : Colors.white,
-        borderRadius: appSurfaceBorderRadius,
-        border: Border.all(
-          color: isDark ? const Color(0xFF3B4B5C) : const Color(0xFFE1E5EB),
-          width: .5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: isDark ? const Color(0x40000000) : const Color(0x12000000),
-            blurRadius: 20,
-            offset: Offset(0, 9),
-          ),
-        ],
-      ),
+      blurSigma: 10,
       child: Form(
         key: formKey,
         child: Column(

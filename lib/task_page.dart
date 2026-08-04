@@ -244,136 +244,143 @@ class _AddTaskDialogState extends State<_AddTaskDialog> {
     final border = OutlineInputBorder(borderRadius: BorderRadius.circular(12));
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 440),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 18),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Add task',
-                  style: TextStyle(
-                    color: isDark ? Colors.white : const Color(0xFF22262C),
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: FrostedGlassSurface(
+        borderRadius: BorderRadius.circular(18),
+        blurSigma: 8,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 18),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Add task',
+                    style: TextStyle(
+                      color: isDark ? Colors.white : const Color(0xFF22262C),
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 20),
-                TextFormField(
-                  controller: _courseController,
-                  autofocus: true,
-                  textInputAction: TextInputAction.next,
-                  decoration: InputDecoration(
-                    labelText: 'Course',
-                    border: border,
+                  const SizedBox(height: 20),
+                  TextFormField(
+                    controller: _courseController,
+                    autofocus: true,
+                    textInputAction: TextInputAction.next,
+                    decoration: InputDecoration(
+                      labelText: 'Course',
+                      border: border,
+                    ),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Course is required.'
+                        : null,
                   ),
-                  validator: (value) => value == null || value.trim().isEmpty
-                      ? 'Course is required.'
-                      : null,
-                ),
-                const SizedBox(height: 14),
-                TextFormField(
-                  controller: _subjectController,
-                  textInputAction: TextInputAction.next,
-                  decoration: InputDecoration(
-                    labelText: 'Subject',
-                    border: border,
+                  const SizedBox(height: 14),
+                  TextFormField(
+                    controller: _subjectController,
+                    textInputAction: TextInputAction.next,
+                    decoration: InputDecoration(
+                      labelText: 'Subject',
+                      border: border,
+                    ),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Subject is required.'
+                        : null,
                   ),
-                  validator: (value) => value == null || value.trim().isEmpty
-                      ? 'Subject is required.'
-                      : null,
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _PickerField(
-                        label: 'Date',
-                        value: _date == null
-                            ? null
-                            : MaterialLocalizations.of(
-                                context,
-                              ).formatMediumDate(_date!),
-                        icon: Icons.calendar_today_outlined,
-                        onTap: _selectDate,
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _PickerField(
+                          label: 'Date',
+                          value: _date == null
+                              ? null
+                              : MaterialLocalizations.of(
+                                  context,
+                                ).formatMediumDate(_date!),
+                          icon: Icons.calendar_today_outlined,
+                          onTap: _selectDate,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _PickerField(
-                        label: 'Time',
-                        value: _time == null
-                            ? null
-                            : MaterialLocalizations.of(
-                                context,
-                              ).formatTimeOfDay(_time!),
-                        icon: Icons.access_time_rounded,
-                        onTap: _selectTime,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _PickerField(
+                          label: 'Time',
+                          value: _time == null
+                              ? null
+                              : MaterialLocalizations.of(
+                                  context,
+                                ).formatTimeOfDay(_time!),
+                          icon: Icons.access_time_rounded,
+                          onTap: _selectTime,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                DropdownButtonFormField<String>(
-                  initialValue: _importance,
-                  decoration: InputDecoration(
-                    labelText: 'Importance level',
-                    border: border,
+                    ],
                   ),
-                  items: const ['Low', 'Medium', 'High']
-                      .map(
-                        (level) =>
-                            DropdownMenuItem(value: level, child: Text(level)),
-                      )
-                      .toList(),
-                  onChanged: (value) => setState(() => _importance = value!),
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
+                  const SizedBox(height: 14),
+                  DropdownButtonFormField<String>(
+                    initialValue: _importance,
+                    decoration: InputDecoration(
+                      labelText: 'Importance level',
+                      border: border,
                     ),
-                    const SizedBox(width: 8),
-                    FilledButton(
-                      onPressed: () {
-                        if (!_formKey.currentState!.validate()) return;
-                        final date = _date == null
-                            ? null
-                            : MaterialLocalizations.of(
-                                context,
-                              ).formatMediumDate(_date!);
-                        final time = _time == null
-                            ? null
-                            : MaterialLocalizations.of(
-                                context,
-                              ).formatTimeOfDay(_time!);
-                        final detail = [
-                          date,
-                          time,
-                        ].whereType<String>().join('   •   ');
-                        Navigator.of(context).pop();
-                        widget.onSaved(
-                          _NewTaskInput(
-                            course: _courseController.text.trim(),
-                            subject: _subjectController.text.trim(),
-                            detail: detail.isEmpty ? 'No due date' : detail,
-                            importance: _importance.toUpperCase(),
+                    items: const ['Low', 'Medium', 'High']
+                        .map(
+                          (level) => DropdownMenuItem(
+                            value: level,
+                            child: Text(level),
                           ),
-                        );
-                      },
-                      child: const Text('Save'),
-                    ),
-                  ],
-                ),
-              ],
+                        )
+                        .toList(),
+                    onChanged: (value) => setState(() => _importance = value!),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('Cancel'),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton(
+                        onPressed: () {
+                          if (!_formKey.currentState!.validate()) return;
+                          final date = _date == null
+                              ? null
+                              : MaterialLocalizations.of(
+                                  context,
+                                ).formatMediumDate(_date!);
+                          final time = _time == null
+                              ? null
+                              : MaterialLocalizations.of(
+                                  context,
+                                ).formatTimeOfDay(_time!);
+                          final detail = [
+                            date,
+                            time,
+                          ].whereType<String>().join('   •   ');
+                          Navigator.of(context).pop();
+                          widget.onSaved(
+                            _NewTaskInput(
+                              course: _courseController.text.trim(),
+                              subject: _subjectController.text.trim(),
+                              detail: detail.isEmpty ? 'No due date' : detail,
+                              importance: _importance.toUpperCase(),
+                            ),
+                          );
+                        },
+                        child: const Text('Save'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
