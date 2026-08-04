@@ -198,10 +198,22 @@ void main() {
     expect(find.byType(FloatingTabBar), findsOneWidget);
   });
 
+  testWidgets('opens Schedule from the upcoming sessions card', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: DashboardPage()));
+
+    await tester.tap(find.text('View\nCalendar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Schedule in your\ncalendar 🗓️'), findsOneWidget);
+    expect(find.byType(FloatingTabBar), findsOneWidget);
+  });
+
   testWidgets('renders the weekly schedule', (WidgetTester tester) async {
     await tester.pumpWidget(const MaterialApp(home: SchedulePage()));
 
-    expect(find.text('Weekly Schedule'), findsOneWidget);
+    expect(find.text('Schedule in your\ncalendar 🗓️'), findsOneWidget);
     expect(find.text('Mathematics'), findsWidgets);
     expect(find.text('Comp Sci'), findsWidgets);
     expect(find.byTooltip('Add study session'), findsOneWidget);
@@ -217,7 +229,7 @@ void main() {
 
     await tester.pumpWidget(const MaterialApp(home: SchedulePage()));
 
-    expect(find.text('Weekly Schedule'), findsOneWidget);
+    expect(find.text('Schedule in your\ncalendar 🗓️'), findsOneWidget);
     final today = DateUtils.dateOnly(DateTime.now());
     final weekStart = today.subtract(Duration(days: today.weekday - 1));
     expect(find.text('${weekStart.day}'), findsOneWidget);
@@ -232,7 +244,7 @@ void main() {
     await tester.tap(find.text('Schedule'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Weekly Schedule'), findsOneWidget);
+    expect(find.text('Schedule in your\ncalendar 🗓️'), findsOneWidget);
     expect(find.byType(FloatingTabBar), findsOneWidget);
   });
 }

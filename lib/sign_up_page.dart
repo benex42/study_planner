@@ -202,17 +202,11 @@ class _SignUpCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 38),
-            const AuthFieldLabel('Full Name'),
-            const SizedBox(height: 8),
             TextFormField(
               controller: nameController,
               textCapitalization: TextCapitalization.words,
               autofillHints: const [AutofillHints.name],
-              decoration: _signUpInputDecoration(
-                context,
-                hintText: 'Your name',
-                prefixIcon: Icons.person_outline_rounded,
-              ),
+              decoration: _signUpInputDecoration(labelText: 'Full Name'),
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
                   return 'Enter your full name';
@@ -221,17 +215,11 @@ class _SignUpCard extends StatelessWidget {
               },
             ),
             const SizedBox(height: 22),
-            const AuthFieldLabel('Email Address'),
-            const SizedBox(height: 8),
             TextFormField(
               controller: emailController,
               keyboardType: TextInputType.emailAddress,
               autofillHints: const [AutofillHints.email],
-              decoration: _signUpInputDecoration(
-                context,
-                hintText: 'you@university.edu',
-                prefixIcon: Icons.mail_outline_rounded,
-              ),
+              decoration: _signUpInputDecoration(labelText: 'Email Address'),
               validator: (value) {
                 if (value == null || !value.contains('@')) {
                   return 'Enter a valid email address';
@@ -240,16 +228,12 @@ class _SignUpCard extends StatelessWidget {
               },
             ),
             const SizedBox(height: 22),
-            const AuthFieldLabel('Password'),
-            const SizedBox(height: 8),
             TextFormField(
               controller: passwordController,
               obscureText: obscurePassword,
               autofillHints: const [AutofillHints.newPassword],
               decoration: _signUpInputDecoration(
-                context,
-                hintText: 'Create a password',
-                prefixIcon: Icons.lock_outline_rounded,
+                labelText: 'Password',
                 suffix: IconButton(
                   onPressed: onPasswordVisibilityChanged,
                   icon: Icon(
@@ -267,16 +251,12 @@ class _SignUpCard extends StatelessWidget {
               },
             ),
             const SizedBox(height: 22),
-            const AuthFieldLabel('Confirm Password'),
-            const SizedBox(height: 8),
             TextFormField(
               controller: confirmPasswordController,
               obscureText: obscurePassword,
               autofillHints: const [AutofillHints.newPassword],
               decoration: _signUpInputDecoration(
-                context,
-                hintText: 'Confirm your password',
-                prefixIcon: Icons.lock_outline_rounded,
+                labelText: 'Confirm Password',
                 suffix: IconButton(
                   onPressed: onPasswordVisibilityChanged,
                   icon: Icon(
@@ -380,46 +360,14 @@ class _SignUpCard extends StatelessWidget {
     );
   }
 
-  InputDecoration _signUpInputDecoration(
-    BuildContext context, {
-    required String hintText,
-    required IconData prefixIcon,
+  InputDecoration _signUpInputDecoration({
+    required String labelText,
     Widget? suffix,
   }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final border = OutlineInputBorder(
-      borderRadius: const BorderRadius.all(Radius.circular(8)),
-      borderSide: BorderSide(
-        color: isDark ? const Color(0xFF495B6D) : const Color(0xFFB8C3D5),
-      ),
-    );
     return InputDecoration(
-      hintText: hintText,
-      hintStyle: TextStyle(
-        color: isDark ? const Color(0xFF9AAABA) : const Color(0xFF697487),
-        fontSize: 16,
-        fontWeight: FontWeight.w500,
-      ),
-      prefixIcon: Icon(
-        prefixIcon,
-        color: isDark ? const Color(0xFFAEBECD) : const Color(0xFF717D8F),
-        size: 24,
-      ),
+      labelText: labelText,
       suffixIcon: suffix,
-      filled: true,
-      fillColor: isDark ? const Color(0xFF121C26) : const Color(0xFFF8F9FB),
-      contentPadding: const EdgeInsets.symmetric(vertical: 15),
-      isDense: true,
-      enabledBorder: border,
-      focusedBorder: border.copyWith(
-        borderSide: const BorderSide(color: Color(0xFF0768BA), width: 1.5),
-      ),
-      errorBorder: border.copyWith(
-        borderSide: const BorderSide(color: Color(0xFFB3261E)),
-      ),
-      focusedErrorBorder: border.copyWith(
-        borderSide: const BorderSide(color: Color(0xFFB3261E), width: 1.5),
-      ),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
     );
   }
 }

@@ -47,24 +47,6 @@ class AuthBrandHeader extends StatelessWidget {
   }
 }
 
-class AuthFieldLabel extends StatelessWidget {
-  const AuthFieldLabel(this.label, {super.key});
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Text(
-      label,
-      style: TextStyle(
-        color: isDark ? const Color(0xFFDDE7F0) : const Color(0xFF3E4655),
-        fontSize: 14,
-        fontWeight: FontWeight.w700,
-      ),
-    );
-  }
-}
-
 class AuthSocialDivider extends StatelessWidget {
   const AuthSocialDivider({super.key});
 

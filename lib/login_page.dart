@@ -181,17 +181,11 @@ class _LoginCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const AuthFieldLabel('Email'),
-            const SizedBox(height: 8),
             TextFormField(
               controller: emailController,
               keyboardType: TextInputType.emailAddress,
               autofillHints: const [AutofillHints.email],
-              decoration: _inputDecoration(
-                context,
-                hintText: 'you@university.edu',
-                prefixIcon: Icons.mail_outline_rounded,
-              ),
+              decoration: _inputDecoration(labelText: 'Email'),
               validator: (value) {
                 if (value == null || !value.contains('@')) {
                   return 'Enter a valid email address';
@@ -199,39 +193,13 @@ class _LoginCard extends StatelessWidget {
                 return null;
               },
             ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const AuthFieldLabel('Password'),
-                const Spacer(),
-                Flexible(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerRight,
-                    child: GestureDetector(
-                      onTap: onForgotPassword,
-                      child: const Text(
-                        'Forgot Password?',
-                        style: TextStyle(
-                          color: Color(0xFF0062B5),
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 18),
             TextFormField(
               controller: passwordController,
               obscureText: obscurePassword,
               autofillHints: const [AutofillHints.password],
               decoration: _inputDecoration(
-                context,
-                hintText: 'Enter your password',
-                prefixIcon: Icons.lock_outline_rounded,
+                labelText: 'Password',
                 suffix: IconButton(
                   onPressed: onPasswordVisibilityChanged,
                   icon: Icon(
@@ -247,6 +215,21 @@ class _LoginCard extends StatelessWidget {
                 }
                 return null;
               },
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: GestureDetector(
+                onTap: onForgotPassword,
+                child: const Text(
+                  'Forgot Password?',
+                  style: TextStyle(
+                    color: Color(0xFF0062B5),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
             ),
             const SizedBox(height: 25),
             SizedBox(
@@ -268,9 +251,9 @@ class _LoginCard extends StatelessWidget {
                 child: const Text('Log In'),
               ),
             ),
-            const SizedBox(height: 31),
+            const SizedBox(height: 25),
             const AuthSocialDivider(),
-            const SizedBox(height: 31),
+            const SizedBox(height: 25),
             AuthSocialButton(
               label: 'Google',
               logo: const AuthGoogleMark(),
@@ -292,46 +275,14 @@ class _LoginCard extends StatelessWidget {
     );
   }
 
-  InputDecoration _inputDecoration(
-    BuildContext context, {
-    required String hintText,
-    required IconData prefixIcon,
+  InputDecoration _inputDecoration({
+    required String labelText,
     Widget? suffix,
   }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final border = OutlineInputBorder(
-      borderRadius: const BorderRadius.all(Radius.circular(8)),
-      borderSide: BorderSide(
-        color: isDark ? const Color(0xFF495B6D) : const Color(0xFFB8C3D5),
-      ),
-    );
     return InputDecoration(
-      hintText: hintText,
-      hintStyle: TextStyle(
-        color: isDark ? const Color(0xFF9AAABA) : const Color(0xFF697487),
-        fontSize: 16,
-        fontWeight: FontWeight.w500,
-      ),
-      prefixIcon: Icon(
-        prefixIcon,
-        color: isDark ? const Color(0xFFAEBECD) : const Color(0xFF717D8F),
-        size: 24,
-      ),
+      labelText: labelText,
       suffixIcon: suffix,
-      filled: true,
-      fillColor: isDark ? const Color(0xFF121C26) : const Color(0xFFF8F9FB),
-      contentPadding: const EdgeInsets.symmetric(vertical: 15),
-      isDense: true,
-      enabledBorder: border,
-      focusedBorder: border.copyWith(
-        borderSide: const BorderSide(color: Color(0xFF0768BA), width: 1.5),
-      ),
-      errorBorder: border.copyWith(
-        borderSide: const BorderSide(color: Color(0xFFB3261E)),
-      ),
-      focusedErrorBorder: border.copyWith(
-        borderSide: const BorderSide(color: Color(0xFFB3261E), width: 1.5),
-      ),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
     );
   }
 }

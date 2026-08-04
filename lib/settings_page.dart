@@ -84,11 +84,6 @@ class _SettingsPageState extends State<SettingsPage> {
                         onTap: () =>
                             _showMessage('Profile Information selected.'),
                       ),
-                      _SettingsRow(
-                        icon: Icons.link_rounded,
-                        label: 'Linked Accounts',
-                        onTap: () => _showMessage('Linked Accounts selected.'),
-                      ),
                     ],
                   ),
                   const SizedBox(height: 17),
@@ -107,6 +102,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       _SettingsRow(
                         icon: Icons.palette_outlined,
                         label: 'Appearance',
+                        showChevron: false,
                         trailing: _ThemePicker(
                           themeMode: _selectedThemeMode,
                           onChanged: _setThemeMode,
@@ -415,23 +411,7 @@ class _SettingsSection extends StatelessWidget {
             borderRadius: appSurfaceBorderRadius,
             border: Border.all(color: divider, width: .5),
           ),
-          child: Column(
-            children: List.generate(children.length, (index) {
-              return Column(
-                children: [
-                  children[index],
-                  if (index != children.length - 1)
-                    Divider(
-                      height: 1,
-                      thickness: 1,
-                      color: divider,
-                      indent: 12,
-                      endIndent: 0,
-                    ),
-                ],
-              );
-            }),
-          ),
+          child: Column(children: children),
         ),
       ],
     );
@@ -444,12 +424,14 @@ class _SettingsRow extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.trailing,
+    this.showChevron = true,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback? onTap;
   final Widget? trailing;
+  final bool showChevron;
 
   @override
   Widget build(BuildContext context) {
@@ -483,7 +465,14 @@ class _SettingsRow extends StatelessWidget {
                 ),
               ),
               if (trailing != null) ...[trailing!, const SizedBox(width: 6)],
-              Icon(Icons.chevron_right_rounded, color: primary, size: 21),
+              if (showChevron)
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: isDark
+                      ? const Color(0x66F2F5F9)
+                      : const Color(0x6634383F),
+                  size: 21,
+                ),
             ],
           ),
         ),

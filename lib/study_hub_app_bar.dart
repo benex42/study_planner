@@ -39,8 +39,8 @@ class StudyHubAppBar extends StatelessWidget {
               icon: Icon(
                 Icons.settings_outlined,
                 color: isDark
-                    ? const Color(0xFF8DCAFF)
-                    : const Color(0xFF0069BD),
+                    ? const Color(0xFFB5C0CD)
+                    : const Color(0xFF667085),
                 size: 24,
               ),
               tooltip: 'Settings',

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import 'floating_tab_bar.dart';
-import 'study_hub_app_bar.dart';
 
 class SchedulePage extends StatefulWidget {
   const SchedulePage({super.key, this.onThemeToggle, this.embedded = false});
@@ -15,78 +14,34 @@ class SchedulePage extends StatefulWidget {
 
 class _SchedulePageState extends State<SchedulePage> {
   DateTime _weekStart = _startOfCalendarWeek(DateTime.now());
+  DateTime _selectedDate = DateUtils.dateOnly(DateTime.now());
 
-  void _changeWeek(int offset) {
-    setState(() => _weekStart = _weekStart.add(Duration(days: offset * 7)));
-  }
-
-  String get _weekLabel {
-    const months = <String>[
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
-    ];
-    final end = _weekStart.add(const Duration(days: 6));
-    if (_weekStart.year == end.year && _weekStart.month == end.month) {
-      return '${months[_weekStart.month - 1]} ${_weekStart.day}–${end.day}, '
-          '${end.year}';
-    }
-    if (_weekStart.year == end.year) {
-      return '${months[_weekStart.month - 1]} ${_weekStart.day} – '
-          '${months[end.month - 1]} ${end.day}, ${end.year}';
-    }
-    return '${months[_weekStart.month - 1]} ${_weekStart.day}, '
-        '${_weekStart.year} – ${months[end.month - 1]} ${end.day}, ${end.year}';
-  }
-
-  void _showAddSessionSheet() {
-    showModalBottomSheet<void>(
+  Future<void> _pickScheduleDate() async {
+    final selected = await showDatePicker(
       context: context,
-      showDragHandle: true,
-      builder: (context) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Add study session',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 18),
-            TextField(
-              autofocus: true,
-              decoration: InputDecoration(
-                labelText: 'Session title',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(this.context).showSnackBar(
-                    const SnackBar(content: Text('Study session added.')),
-                  );
-                },
-                child: const Text('Add session'),
-              ),
-            ),
-          ],
-        ),
+      initialDate: _selectedDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+    );
+    if (selected != null && mounted) _selectScheduleDate(selected);
+  }
+
+  void _selectScheduleDate(DateTime date) {
+    setState(() {
+      _selectedDate = DateUtils.dateOnly(date);
+      _weekStart = _startOfCalendarWeek(_selectedDate);
+    });
+  }
+
+  void _showAddSessionDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (context) => _AddSessionDialog(
+        onAdd: () {
+          ScaffoldMessenger.of(
+            this.context,
+          ).showSnackBar(const SnackBar(content: Text('Study session added.')));
+        },
       ),
     );
   }
@@ -100,33 +55,19 @@ class _SchedulePageState extends State<SchedulePage> {
 
     final content = Column(
       children: [
-        if (!widget.embedded) const StudyHubAppBar(),
         Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) => SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                16,
-                28,
-                16,
-                // The dashboard's floating navigation intentionally overlays
-                // embedded page cards instead of leaving an empty bottom gutter.
-                widget.embedded ? 16 : 24,
-              ),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 500),
-                  child: _ScheduleContent(
-                    weekLabel: _weekLabel,
-                    weekStart: _weekStart,
-                    isCurrentWeek: DateUtils.isSameDay(
-                      _weekStart,
-                      _startOfCalendarWeek(DateTime.now()),
-                    ),
-                    isDark: isDark,
-                    calendarHeight: constraints.maxHeight < 760 ? 740 : 860,
-                    onPreviousWeek: () => _changeWeek(-1),
-                    onNextWeek: () => _changeWeek(1),
-                  ),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(16, 18, 16, widget.embedded ? 16 : 24),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 500),
+                child: _ScheduleContent(
+                  weekStart: _weekStart,
+                  selectedDate: _selectedDate,
+                  isDark: isDark,
+                  onDateSelected: _selectScheduleDate,
+                  onCalendarTap: _pickScheduleDate,
+                  onClose: () => Navigator.of(context).maybePop(),
                 ),
               ),
             ),
@@ -137,7 +78,7 @@ class _SchedulePageState extends State<SchedulePage> {
     final pageBody = widget.embedded ? content : SafeArea(child: content);
 
     final addButton = FloatingActionButton(
-      onPressed: _showAddSessionSheet,
+      onPressed: _showAddSessionDialog,
       backgroundColor: const Color(0xFF0769BA),
       foregroundColor: Colors.white,
       elevation: 3,
@@ -193,6 +134,172 @@ class _SchedulePageState extends State<SchedulePage> {
   }
 }
 
+class _AddSessionDialog extends StatefulWidget {
+  const _AddSessionDialog({required this.onAdd});
+
+  final VoidCallback onAdd;
+
+  @override
+  State<_AddSessionDialog> createState() => _AddSessionDialogState();
+}
+
+class _AddSessionDialogState extends State<_AddSessionDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _courseController = TextEditingController();
+  DateTime? _date;
+  TimeOfDay? _time;
+
+  @override
+  void dispose() {
+    _courseController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _selectDate() async {
+    final selected = await showDatePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+      initialDate: _date ?? DateTime.now(),
+    );
+    if (selected != null && mounted) setState(() => _date = selected);
+  }
+
+  Future<void> _selectTime() async {
+    final selected = await showTimePicker(
+      context: context,
+      initialTime: _time ?? TimeOfDay.now(),
+    );
+    if (selected != null && mounted) setState(() => _time = selected);
+  }
+
+  void _addSession() {
+    if (!_formKey.currentState!.validate()) return;
+    Navigator.of(context).pop();
+    widget.onAdd();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final border = OutlineInputBorder(borderRadius: BorderRadius.circular(12));
+
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 440),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 18),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Add study session',
+                  style: TextStyle(
+                    color: isDark ? Colors.white : const Color(0xFF22262C),
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                TextFormField(
+                  controller: _courseController,
+                  autofocus: true,
+                  textInputAction: TextInputAction.next,
+                  decoration: InputDecoration(
+                    labelText: 'Course',
+                    border: border,
+                  ),
+                  validator: (value) => value == null || value.trim().isEmpty
+                      ? 'Course is required.'
+                      : null,
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _SessionPickerField(
+                        label: 'Date',
+                        value: _date == null
+                            ? null
+                            : MaterialLocalizations.of(
+                                context,
+                              ).formatMediumDate(_date!),
+                        icon: Icons.calendar_today_outlined,
+                        onTap: _selectDate,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _SessionPickerField(
+                        label: 'Time',
+                        value: _time == null
+                            ? null
+                            : MaterialLocalizations.of(
+                                context,
+                              ).formatTimeOfDay(_time!),
+                        icon: Icons.access_time_rounded,
+                        onTap: _selectTime,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: _addSession,
+                      child: const Text('Add session'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SessionPickerField extends StatelessWidget {
+  const _SessionPickerField({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String label;
+  final String? value;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(12),
+    child: InputDecorator(
+      decoration: InputDecoration(
+        labelText: label,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        suffixIcon: Icon(icon, size: 19),
+      ),
+      child: Text(value ?? 'Select', overflow: TextOverflow.ellipsis),
+    ),
+  );
+}
+
 DateTime _startOfCalendarWeek(DateTime date) {
   final calendarDay = DateUtils.dateOnly(date);
   return calendarDay.subtract(Duration(days: calendarDay.weekday - 1));
@@ -200,397 +307,429 @@ DateTime _startOfCalendarWeek(DateTime date) {
 
 class _ScheduleContent extends StatelessWidget {
   const _ScheduleContent({
-    required this.weekLabel,
     required this.weekStart,
-    required this.isCurrentWeek,
+    required this.selectedDate,
     required this.isDark,
-    required this.calendarHeight,
-    required this.onPreviousWeek,
-    required this.onNextWeek,
+    required this.onDateSelected,
+    required this.onCalendarTap,
+    required this.onClose,
   });
 
-  final String weekLabel;
   final DateTime weekStart;
-  final bool isCurrentWeek;
+  final DateTime selectedDate;
   final bool isDark;
-  final double calendarHeight;
-  final VoidCallback onPreviousWeek;
-  final VoidCallback onNextWeek;
+  final ValueChanged<DateTime> onDateSelected;
+  final VoidCallback onCalendarTap;
+  final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
     final primary = isDark ? Colors.white : const Color(0xFF202328);
-    final secondary = isDark
-        ? const Color(0xFFABB7C7)
-        : const Color(0xFF939BA8);
-    final border = isDark ? const Color(0xFF384351) : const Color(0xFFC4CDDB);
+    final week = List.generate(
+      7,
+      (index) => weekStart
+          .subtract(const Duration(days: 1))
+          .add(Duration(days: index)),
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _ScheduleTopBar(
+          date: selectedDate,
+          isDark: isDark,
+          onClose: onClose,
+          onCalendarTap: onCalendarTap,
+        ),
+        const SizedBox(height: 27),
         Text(
-          'Weekly Schedule',
+          'Schedule in your\ncalendar 🗓️',
           style: TextStyle(
             color: primary,
-            fontSize: 28,
+            fontSize: 27,
             fontWeight: FontWeight.w800,
-            height: 1,
+            height: 1.04,
           ),
         ),
-        const SizedBox(height: 6),
-        Text(weekLabel, style: TextStyle(color: secondary, fontSize: 15)),
-        const SizedBox(height: 25),
-        Container(
-          height: 48,
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1C2530) : Colors.white,
-            borderRadius: appSurfaceBorderRadius,
-            border: Border.all(color: border, width: .5),
-          ),
-          child: Row(
-            children: [
-              IconButton(
-                onPressed: onPreviousWeek,
-                icon: const Icon(Icons.chevron_left_rounded),
-                tooltip: 'Previous week',
-              ),
-              Expanded(
-                child: Text(
-                  isCurrentWeek ? 'This Week' : 'Selected Week',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                ),
-              ),
-              IconButton(
-                onPressed: onNextWeek,
-                icon: const Icon(Icons.chevron_right_rounded),
-                tooltip: 'Next week',
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 30),
-        _ScheduleGrid(
-          height: calendarHeight,
+        const SizedBox(height: 24),
+        _WeekDateStrip(
+          dates: week,
+          selectedDate: selectedDate,
           isDark: isDark,
-          weekStart: weekStart,
+          onSelected: onDateSelected,
         ),
-        const SizedBox(height: 20),
-        const Wrap(
-          spacing: 10,
-          runSpacing: 2,
-          children: [
-            _LegendItem(color: Color(0xFF5AA1FA), label: 'Mathematics'),
-            _LegendItem(color: Color(0xFF3FD487), label: 'Biology'),
-            _LegendItem(color: Color(0xFFB46EFF), label: 'Comp Science'),
-            _LegendItem(color: Color(0xFFFF657C), label: 'Physics'),
-            _LegendItem(color: Color(0xFFFFB71E), label: 'History'),
-          ],
+        const SizedBox(height: 23),
+        _AgendaList(isDark: isDark),
+      ],
+    );
+  }
+}
+
+class _ScheduleTopBar extends StatelessWidget {
+  const _ScheduleTopBar({
+    required this.date,
+    required this.isDark,
+    required this.onClose,
+    required this.onCalendarTap,
+  });
+
+  final DateTime date;
+  final bool isDark;
+  final VoidCallback onClose;
+  final VoidCallback onCalendarTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final surface = isDark ? const Color(0xFF1B2632) : Colors.white;
+    final iconColor = isDark
+        ? const Color(0xFFD8E5F0)
+        : const Color(0xFF26323D);
+    return Row(
+      children: [
+        _TopAction(
+          icon: Icons.close_rounded,
+          tooltip: 'Close schedule',
+          color: iconColor,
+          surface: surface,
+          onTap: onClose,
+        ),
+        const Spacer(),
+        InkWell(
+          onTap: onCalendarTap,
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            height: 42,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: surface,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _monthName(date.month),
+                  style: TextStyle(
+                    color: iconColor,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(Icons.calendar_today_outlined, color: iconColor, size: 17),
+              ],
+            ),
+          ),
+        ),
+        const Spacer(),
+        _TopAction(
+          icon: Icons.notifications_none_rounded,
+          tooltip: 'Notifications',
+          color: iconColor,
+          surface: surface,
+          onTap: () {},
         ),
       ],
     );
   }
 }
 
-class _ScheduleGrid extends StatelessWidget {
-  const _ScheduleGrid({
-    required this.height,
-    required this.isDark,
-    required this.weekStart,
+class _TopAction extends StatelessWidget {
+  const _TopAction({
+    required this.icon,
+    required this.tooltip,
+    required this.color,
+    required this.surface,
+    required this.onTap,
   });
 
-  final double height;
-  final bool isDark;
-  final DateTime weekStart;
+  final IconData icon;
+  final String tooltip;
+  final Color color;
+  final Color surface;
+  final VoidCallback onTap;
 
-  static const _startHour = 8;
-  static const _endHour = 18;
-  static const _headerHeight = 77.0;
+  @override
+  Widget build(BuildContext context) => Tooltip(
+    message: tooltip,
+    child: Material(
+      color: surface,
+      shape: const CircleBorder(),
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: SizedBox(
+          width: 42,
+          height: 42,
+          child: Icon(icon, color: color, size: 20),
+        ),
+      ),
+    ),
+  );
+}
+
+class _WeekDateStrip extends StatelessWidget {
+  const _WeekDateStrip({
+    required this.dates,
+    required this.selectedDate,
+    required this.isDark,
+    required this.onSelected,
+  });
+
+  final List<DateTime> dates;
+  final DateTime selectedDate;
+  final bool isDark;
+  final ValueChanged<DateTime> onSelected;
 
   @override
   Widget build(BuildContext context) {
-    final border = isDark ? const Color(0xFF3A4654) : const Color(0xFFC6CFDC);
-    final gridLine = isDark ? const Color(0xFF293440) : const Color(0xFFE2E6EC);
-    final label = isDark ? const Color(0xFFB7C1CF) : const Color(0xFF6E7887);
-
-    return Container(
-      height: height,
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF171F29) : Colors.white,
-        borderRadius: appSurfaceBorderRadius,
-        border: Border.all(color: border, width: .5),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          const timeWidth = 74.0;
-          final dayWidth = (constraints.maxWidth - timeWidth) / 2;
-          final hourHeight = (height - _headerHeight) / (_endHour - _startHour);
-
-          return Stack(
-            children: [
-              Positioned(
-                left: timeWidth,
-                right: 0,
-                top: 0,
-                height: _headerHeight,
-                child: Row(
+    final secondary = isDark
+        ? const Color(0xFFAEB9C8)
+        : const Color(0xFF8C97A4);
+    return Row(
+      children: [
+        for (final date in dates)
+          Expanded(
+            child: InkWell(
+              onTap: () => onSelected(date),
+              borderRadius: BorderRadius.circular(22),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Column(
                   children: [
-                    Expanded(child: _DayHeader(date: weekStart)),
-                    Expanded(
-                      child: _DayHeader(
-                        date: weekStart.add(const Duration(days: 1)),
+                    Text(
+                      _shortWeekday(date.weekday),
+                      style: TextStyle(
+                        color: secondary,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      width: 32,
+                      height: 32,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: DateUtils.isSameDay(date, selectedDate)
+                            ? const Color(0xFF0769BA)
+                            : isDark
+                            ? const Color(0xFF202B37)
+                            : const Color(0xFFF2F4F7),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(
+                        '${date.day}',
+                        style: TextStyle(
+                          color: DateUtils.isSameDay(date, selectedDate)
+                              ? Colors.white
+                              : isDark
+                              ? const Color(0xFFE3EAF1)
+                              : const Color(0xFF55606D),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-              Positioned(
-                left: timeWidth,
-                top: 0,
-                bottom: 0,
-                child: Container(width: 1, color: border),
-              ),
-              Positioned(
-                left: timeWidth + dayWidth,
-                top: 0,
-                bottom: 0,
-                child: Container(width: 1, color: border),
-              ),
-              for (var index = 0; index <= _endHour - _startHour; index++)
-                Positioned(
-                  left: timeWidth,
-                  right: 0,
-                  top: _headerHeight + hourHeight * index,
-                  child: Container(height: 1, color: gridLine),
-                ),
-              for (var hour = _startHour; hour < _endHour; hour++)
-                Positioned(
-                  left: 0,
-                  width: timeWidth - 10,
-                  top: _headerHeight + hourHeight * (hour - _startHour) - 8,
-                  child: Text(
-                    '${hour.toString().padLeft(2, '0')}:00',
-                    textAlign: TextAlign.right,
-                    style: TextStyle(
-                      color: label,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              _CalendarEvent(
-                day: 0,
-                start: 8,
-                duration: 2,
-                time: '08:00 - 10:00',
-                title: 'Mathematics',
-                detail: 'Calculus II',
-                color: const Color(0xFF5AA1FA),
-                background: const Color(0xFFEAF3FF),
-                dayWidth: dayWidth,
-                hourHeight: hourHeight,
-              ),
-              _CalendarEvent(
-                day: 1,
-                start: 9,
-                duration: 2,
-                time: '09:00 - 11:00',
-                title: 'Comp Sci',
-                detail: 'Algorithms',
-                color: const Color(0xFFB46EFF),
-                background: const Color(0xFFF7EEFF),
-                dayWidth: dayWidth,
-                hourHeight: hourHeight,
-              ),
-              _CalendarEvent(
-                day: 0,
-                start: 11,
-                duration: 1,
-                time: '11:00 - 12:00',
-                title: 'Biology',
-                detail: 'Lab Report',
-                color: const Color(0xFF3FD487),
-                background: const Color(0xFFEAFBF2),
-                dayWidth: dayWidth,
-                hourHeight: hourHeight,
-              ),
-              _CalendarEvent(
-                day: 0,
-                start: 13,
-                duration: 2,
-                time: '13:00 - 15:00',
-                title: 'Study Group',
-                detail: 'Library Hall',
-                color: const Color(0xFF9AAAC0),
-                background: const Color(0xFFF2F5F8),
-                dayWidth: dayWidth,
-                hourHeight: hourHeight,
-              ),
-              _CalendarEvent(
-                day: 1,
-                start: 14,
-                duration: 1.5,
-                time: '14:00 - 15:30',
-                title: 'Physics',
-                detail: 'Quantum Intro',
-                color: const Color(0xFFFF657C),
-                background: const Color(0xFFFFEEF0),
-                dayWidth: dayWidth,
-                hourHeight: hourHeight,
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _DayHeader extends StatelessWidget {
-  const _DayHeader({required this.date});
-
-  final DateTime date;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Text(
-          day,
-          style: const TextStyle(
-            color: Color(0xFF707988),
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
+            ),
           ),
-        ),
-        Text(
-          '${date.day}',
-          style: const TextStyle(
-            fontSize: 26,
-            fontWeight: FontWeight.w800,
-            height: 1,
-          ),
-        ),
       ],
     );
   }
-
-  String get day {
-    const names = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-    return names[date.weekday - 1];
-  }
 }
 
-class _CalendarEvent extends StatelessWidget {
-  const _CalendarEvent({
-    required this.day,
-    required this.start,
-    required this.duration,
+class _AgendaList extends StatelessWidget {
+  const _AgendaList({required this.isDark});
+
+  final bool isDark;
+
+  static const sessions = [
+    _AgendaSession(
+      time: '8:00 AM',
+      title: 'Mathematics',
+      detail: 'Today 8:00 AM · Calculus II',
+      icon: Icons.functions_rounded,
+      color: Color(0xFF0769BA),
+      lightBackground: Color(0xFFE5F2FD),
+      darkBackground: Color(0xFF193C59),
+    ),
+    _AgendaSession(
+      time: '9:30 AM',
+      title: 'Comp Sci',
+      detail: 'Today 9:30 AM · Algorithms',
+      icon: Icons.mail_outline_rounded,
+      color: Color(0xFF8E58D8),
+      lightBackground: Color(0xFFF0E8FF),
+      darkBackground: Color(0xFF3A2B50),
+    ),
+    _AgendaSession(
+      time: '10:00 AM',
+      title: 'Biology',
+      detail: 'Today 10:00 AM · Lab report',
+      icon: Icons.biotech_outlined,
+      color: Color(0xFF25875C),
+      lightBackground: Color(0xFFE3F6EC),
+      darkBackground: Color(0xFF1F4237),
+    ),
+    _AgendaSession(
+      time: '1:00 PM',
+      title: 'Study Group',
+      detail: 'Today 1:00 PM · Library Hall',
+      icon: Icons.groups_rounded,
+      color: Color(0xFF5E7187),
+      lightBackground: Color(0xFFEDF1F5),
+      darkBackground: Color(0xFF2C3A47),
+    ),
+    _AgendaSession(
+      time: '2:00 PM',
+      title: 'Physics',
+      detail: 'Today 2:00 PM · Quantum Intro',
+      icon: Icons.science_outlined,
+      color: Color(0xFFD94D65),
+      lightBackground: Color(0xFFFFE9ED),
+      darkBackground: Color(0xFF4A2931),
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      for (final session in sessions) ...[
+        _AgendaRow(session: session, isDark: isDark),
+        if (session != sessions.last) const SizedBox(height: 18),
+      ],
+    ],
+  );
+}
+
+class _AgendaSession {
+  const _AgendaSession({
     required this.time,
     required this.title,
     required this.detail,
+    required this.icon,
     required this.color,
-    required this.background,
-    required this.dayWidth,
-    required this.hourHeight,
+    required this.lightBackground,
+    required this.darkBackground,
   });
 
-  final int day;
-  final double start;
-  final double duration;
   final String time;
   final String title;
   final String detail;
+  final IconData icon;
   final Color color;
-  final Color background;
-  final double dayWidth;
-  final double hourHeight;
+  final Color lightBackground;
+  final Color darkBackground;
+}
+
+class _AgendaRow extends StatelessWidget {
+  const _AgendaRow({required this.session, required this.isDark});
+
+  final _AgendaSession session;
+  final bool isDark;
 
   @override
-  Widget build(BuildContext context) {
-    const timeWidth = 74.0;
-    const headerHeight = 77.0;
-    final top = headerHeight + (start - 8) * hourHeight + 4;
-    final eventHeight = duration * hourHeight - 8;
-
-    return Positioned(
-      left: timeWidth + day * dayWidth + 3,
-      top: top,
-      width: dayWidth - 6,
-      height: eventHeight,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(15, 11, 8, 8),
-        decoration: BoxDecoration(
-          color: background,
-          borderRadius: appSurfaceBorderRadius,
-          border: Border(left: BorderSide(color: color, width: 5)),
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      SizedBox(
+        width: 65,
+        child: Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Text(
+            session.time,
+            style: TextStyle(
+              color: isDark ? const Color(0xFFAEB9C8) : const Color(0xFF8A95A3),
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         ),
-        child: DefaultTextStyle(
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(height: 1.25),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      ),
+      Expanded(
+        child: Container(
+          height: 86,
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+          decoration: BoxDecoration(
+            color: isDark ? session.darkBackground : session.lightBackground,
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Row(
             children: [
-              Text(
-                time,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: session.color,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(session.icon, color: Colors.white, size: 19),
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      session.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: isDark ? Colors.white : const Color(0xFF24303D),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      session.detail,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: isDark
+                            ? const Color(0xFFD3DFEA)
+                            : const Color(0xFF657181),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 3),
-              Text(
-                title,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              if (duration > 1.25) ...[
-                const SizedBox(height: 2),
-                Text(detail, style: TextStyle(color: color, fontSize: 12)),
-              ],
             ],
           ),
         ),
       ),
-    );
-  }
+    ],
+  );
 }
 
-class _LegendItem extends StatelessWidget {
-  const _LegendItem({required this.color, required this.label});
+String _monthName(int month) {
+  const names = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+  return names[month - 1];
+}
 
-  final Color color;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 15,
-          height: 15,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 9),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Color(0xFF3E4755),
-            fontSize: 16,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
-    );
-  }
+String _shortWeekday(int weekday) {
+  const names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  return names[weekday - 1];
 }
 
 class _ScheduleNavigation extends StatelessWidget {

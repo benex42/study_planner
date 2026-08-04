@@ -37,6 +37,9 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Future<void> _refreshCurrentPage() async {
+    if (_selectedTab == 0) {
+      _welcomeController.forward(from: 0);
+    }
     await Future<void>.delayed(const Duration(milliseconds: 900));
 
     if (mounted) setState(() {});
@@ -103,7 +106,10 @@ class _DashboardPageState extends State<DashboardPage>
                                       setState(() => _selectedTab = 3),
                                 ),
                                 const SizedBox(height: 15),
-                                const _SessionsCard(),
+                                _SessionsCard(
+                                  onViewCalendar: () =>
+                                      setState(() => _selectedTab = 1),
+                                ),
                                 const SizedBox(height: 15),
                                 _PriorityTasksCard(
                                   completedTasks: _completedTasks,
@@ -398,7 +404,9 @@ class _ProgressAction extends StatelessWidget {
 }
 
 class _SessionsCard extends StatelessWidget {
-  const _SessionsCard();
+  const _SessionsCard({required this.onViewCalendar});
+
+  final VoidCallback onViewCalendar;
 
   @override
   Widget build(BuildContext context) {
@@ -422,9 +430,7 @@ class _SessionsCard extends StatelessWidget {
                 ),
               ),
               GestureDetector(
-                onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Calendar selected.')),
-                ),
+                onTap: onViewCalendar,
                 child: const Text(
                   'View\nCalendar',
                   textAlign: TextAlign.right,
