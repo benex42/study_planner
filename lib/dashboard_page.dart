@@ -5,10 +5,14 @@ class DashboardPage extends StatefulWidget {
     super.key,
     this.themeMode = ThemeMode.system,
     this.onThemeModeChanged,
+    this.taskRepository,
+    this.sessionRepository,
   });
 
   final ThemeMode themeMode;
   final ValueChanged<ThemeMode>? onThemeModeChanged;
+  final TaskRepository? taskRepository;
+  final StudySessionRepository? sessionRepository;
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -16,10 +20,13 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage>
     with SingleTickerProviderStateMixin {
-  final Set<int> _completedTasks = {2};
-  static const _welcomeMessage = 'Let’s become\nmore Productive, Aaron';
   int _selectedTab = 0;
   late final AnimationController _welcomeController;
+  late final TaskRepository _taskRepository;
+  late final StudySessionRepository _sessionRepository;
+  String? _loadedToken;
+  List<StoredTask> _tasks = [];
+  List<StoredStudySession> _sessions = [];
 
   @override
   void initState() {
@@ -28,6 +35,22 @@ class _DashboardPageState extends State<DashboardPage>
       vsync: this,
       duration: const Duration(milliseconds: 1750),
     )..forward();
+    _taskRepository = widget.taskRepository ?? ApiTaskRepository();
+    _sessionRepository =
+        widget.sessionRepository ?? ApiStudySessionRepository();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final token = context
+        .dependOnInheritedWidgetOfExactType<AuthScope>()
+        ?.notifier
+        ?.accessToken;
+    if (token != null && token != _loadedToken) {
+      _loadedToken = token;
+      _loadDashboardData(token);
+    }
   }
 
   @override
@@ -39,16 +62,82 @@ class _DashboardPageState extends State<DashboardPage>
   Future<void> _refreshCurrentPage() async {
     if (_selectedTab == 0) {
       _welcomeController.forward(from: 0);
+      final token = context
+          .dependOnInheritedWidgetOfExactType<AuthScope>()
+          ?.notifier
+          ?.accessToken;
+      if (token != null) await _loadDashboardData(token);
     }
-    await Future<void>.delayed(const Duration(milliseconds: 900));
+  }
 
-    if (mounted) setState(() {});
+  Future<void> _loadDashboardData(String token) async {
+    try {
+      final results = await Future.wait([
+        _taskRepository.fetchTasks(token),
+        _sessionRepository.fetchUpcomingSessions(token),
+      ]);
+      if (!mounted || token != _loadedToken) return;
+      setState(() {
+        _tasks = results[0] as List<StoredTask>;
+        _sessions = results[1] as List<StoredStudySession>;
+      });
+    } catch (_) {
+      // Each linked page can still show its own error. An empty dashboard is
+      // preferable to displaying invented progress or demo data.
+      if (mounted && token == _loadedToken) {
+        setState(() {
+          _tasks = [];
+          _sessions = [];
+        });
+      }
+    }
+  }
+
+  Future<void> _setTaskCompletion(StoredTask task, bool selected) async {
+    final token = context
+        .dependOnInheritedWidgetOfExactType<AuthScope>()
+        ?.notifier
+        ?.accessToken;
+    if (token == null) return;
+    try {
+      final updated = await _taskRepository.updateStatus(
+        token,
+        task.id,
+        selected ? 'done' : 'todo',
+      );
+      if (!mounted) return;
+      setState(() {
+        _tasks = _tasks
+            .map(
+              (candidate) => candidate.id == updated.id ? updated : candidate,
+            )
+            .toList();
+      });
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not update this task.')),
+        );
+      }
+    }
+  }
+
+  void _selectTab(int index) {
+    setState(() => _selectedTab = index);
+    if (index != 0) return;
+    final token = context
+        .dependOnInheritedWidgetOfExactType<AuthScope>()
+        ?.notifier
+        ?.accessToken;
+    if (token != null) _loadDashboardData(token);
   }
 
   @override
   Widget build(BuildContext context) {
     final currentDate = _formatSystemDate(DateTime.now());
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final authScope = context.dependOnInheritedWidgetOfExactType<AuthScope>();
+    final welcomeMessage = _welcomeMessageFor(authScope?.notifier?.user?.name);
 
     return Scaffold(
       backgroundColor: isDark
@@ -99,29 +188,21 @@ class _DashboardPageState extends State<DashboardPage>
                                   ),
                                 ),
                                 const SizedBox(height: 7),
-                                _buildWelcomeMessage(isDark),
+                                _buildWelcomeMessage(isDark, welcomeMessage),
                                 const SizedBox(height: 22),
                                 _ProgressCard(
-                                  onViewTasks: () =>
-                                      setState(() => _selectedTab = 3),
+                                  tasks: _tasks,
+                                  onViewTasks: () => _selectTab(3),
                                 ),
                                 const SizedBox(height: 15),
                                 _SessionsCard(
-                                  onViewCalendar: () =>
-                                      setState(() => _selectedTab = 1),
+                                  sessions: _sessions,
+                                  onViewCalendar: () => _selectTab(1),
                                 ),
                                 const SizedBox(height: 15),
                                 _PriorityTasksCard(
-                                  completedTasks: _completedTasks,
-                                  onTaskChanged: (index, value) {
-                                    setState(() {
-                                      if (value ?? false) {
-                                        _completedTasks.add(index);
-                                      } else {
-                                        _completedTasks.remove(index);
-                                      }
-                                    });
-                                  },
+                                  tasks: _tasks,
+                                  onTaskChanged: _setTaskCompletion,
                                 ),
                               ],
                             ),
@@ -136,9 +217,7 @@ class _DashboardPageState extends State<DashboardPage>
             child: _DashboardNavigation(
               selectedIndex: _selectedTab,
               isDark: isDark,
-              onDestinationSelected: (index) {
-                setState(() => _selectedTab = index);
-              },
+              onDestinationSelected: _selectTab,
             ),
           ),
         ],
@@ -146,7 +225,7 @@ class _DashboardPageState extends State<DashboardPage>
     );
   }
 
-  Widget _buildWelcomeMessage(bool isDark) {
+  Widget _buildWelcomeMessage(bool isDark, String welcomeMessage) {
     final textStyle = TextStyle(
       color: isDark ? Colors.white : const Color(0xFF23262C),
       fontSize: 33,
@@ -163,12 +242,17 @@ class _DashboardPageState extends State<DashboardPage>
           final progress = MediaQuery.disableAnimationsOf(context)
               ? 1.0
               : _welcomeController.value;
-          final typedLength = (_welcomeMessage.length * progress).floor();
-          final typedMessage = _welcomeMessage.substring(0, typedLength);
-          final isTyping = typedLength < _welcomeMessage.length;
+          final typedLength = (welcomeMessage.length * progress).floor();
+          final typedMessage = welcomeMessage.substring(0, typedLength);
+          final isTyping = typedLength < welcomeMessage.length;
 
           return Text.rich(
-            _welcomeTextSpan(typedMessage, textStyle, showCursor: isTyping),
+            _welcomeTextSpan(
+              typedMessage,
+              welcomeMessage,
+              textStyle,
+              showCursor: isTyping,
+            ),
           );
         },
       ),
@@ -177,11 +261,12 @@ class _DashboardPageState extends State<DashboardPage>
 
   TextSpan _welcomeTextSpan(
     String message,
+    String welcomeMessage,
     TextStyle textStyle, {
     bool showCursor = false,
   }) {
     const productive = 'Productive';
-    final productiveStart = _welcomeMessage.indexOf(productive);
+    final productiveStart = welcomeMessage.indexOf(productive);
     final productiveEnd = productiveStart + productive.length;
     final normalBefore = message.substring(
       0,
@@ -215,6 +300,18 @@ class _DashboardPageState extends State<DashboardPage>
     );
   }
 }
+
+/// Returns the first word in a user's full name for the dashboard greeting.
+///
+/// The fallback keeps the preview and unauthenticated dashboard friendly.
+String dashboardFirstName(String? fullName) {
+  final trimmedName = fullName?.trim() ?? '';
+  if (trimmedName.isEmpty) return 'Aaron';
+  return trimmedName.split(RegExp(r'\s+')).first;
+}
+
+String _welcomeMessageFor(String? fullName) =>
+    'Let’s become\nmore Productive, ${dashboardFirstName(fullName)}';
 
 String _formatSystemDate(DateTime date) {
   const weekdays = [
@@ -275,13 +372,21 @@ class _DashboardCard extends StatelessWidget {
 }
 
 class _ProgressCard extends StatelessWidget {
-  const _ProgressCard({required this.onViewTasks});
+  const _ProgressCard({required this.tasks, required this.onViewTasks});
 
+  final List<StoredTask> tasks;
   final VoidCallback onViewTasks;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final completedCount = tasks.where((task) => task.status == 'done').length;
+    final progress = tasks.isEmpty ? 0.0 : completedCount / tasks.length;
+    final message = tasks.isEmpty
+        ? 'Add your first task\nto begin planning'
+        : completedCount == tasks.length
+        ? 'All your tasks\nare complete'
+        : '${tasks.length - completedCount} task${tasks.length - completedCount == 1 ? '' : 's'}\nleft to complete';
 
     return _DashboardCard(
       child: Column(
@@ -312,9 +417,9 @@ class _ProgressCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Great, your plan\nis almost done',
-                        style: TextStyle(
+                      Text(
+                        message,
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 17,
                           fontWeight: FontWeight.w700,
@@ -327,7 +432,7 @@ class _ProgressCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 12),
-                const _ProgressRing(),
+                _ProgressRing(progress: progress),
               ],
             ),
           ),
@@ -338,7 +443,9 @@ class _ProgressCard extends StatelessWidget {
 }
 
 class _ProgressRing extends StatelessWidget {
-  const _ProgressRing();
+  const _ProgressRing({required this.progress});
+
+  final double progress;
 
   @override
   Widget build(BuildContext context) {
@@ -352,19 +459,19 @@ class _ProgressRing extends StatelessWidget {
             width: 94,
             height: 94,
             child: CircularProgressIndicator(
-              value: .8,
+              value: progress,
               strokeWidth: 13,
               strokeCap: StrokeCap.round,
               backgroundColor: const Color(0x337FC6FA),
               valueColor: const AlwaysStoppedAnimation(Color(0xFFBFE3FF)),
             ),
           ),
-          const Column(
+          Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                '80%',
-                style: TextStyle(
+                '${(progress * 100).round()}%',
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 25,
                   fontWeight: FontWeight.w800,
@@ -404,8 +511,9 @@ class _ProgressAction extends StatelessWidget {
 }
 
 class _SessionsCard extends StatelessWidget {
-  const _SessionsCard({required this.onViewCalendar});
+  const _SessionsCard({required this.sessions, required this.onViewCalendar});
 
+  final List<StoredStudySession> sessions;
   final VoidCallback onViewCalendar;
 
   @override
@@ -445,35 +553,15 @@ class _SessionsCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 20),
-          const _SessionTile(
-            icon: Icons.menu_book_outlined,
-            iconColor: Color(0xFF0D1846),
-            iconBackgroundColor: Color(0xFFE7E9F0),
-            title: 'Data Structures &\nAlgorithms',
-            subtitle: 'Group Review • Library\nHall B',
-            time: '14:00',
-            duration: '60 mins',
-          ),
-          const SizedBox(height: 9),
-          const _SessionTile(
-            icon: Icons.functions_rounded,
-            iconColor: Color(0xFF406EB7),
-            iconBackgroundColor: Color(0xFFE7EEF9),
-            title: 'Calculus III:\nIntegration',
-            subtitle: 'Solo Session • Home\nOffice',
-            time: '16:30',
-            duration: '90 mins',
-          ),
-          const SizedBox(height: 9),
-          const _SessionTile(
-            icon: Icons.history_edu_outlined,
-            iconColor: Color(0xFFE95623),
-            iconBackgroundColor: Color(0xFFFDE9E1),
-            title: 'Modern History\nSeminar',
-            subtitle: 'Online Workshop',
-            time: '19:00',
-            duration: '45 mins',
-          ),
+          if (sessions.isEmpty)
+            const _DashboardEmptyMessage(
+              message: 'No upcoming sessions. Plan one in your calendar.',
+            )
+          else
+            for (final session in sessions.take(3)) ...[
+              _SessionTile(session: session),
+              const SizedBox(height: 9),
+            ],
         ],
       ),
     );
@@ -481,26 +569,36 @@ class _SessionsCard extends StatelessWidget {
 }
 
 class _SessionTile extends StatelessWidget {
-  const _SessionTile({
-    required this.icon,
-    required this.iconColor,
-    required this.iconBackgroundColor,
-    required this.title,
-    required this.subtitle,
-    required this.time,
-    required this.duration,
-  });
-  final IconData icon;
-  final Color iconColor;
-  final Color iconBackgroundColor;
-  final String title;
-  final String subtitle;
-  final String time;
-  final String duration;
+  const _SessionTile({required this.session});
+
+  final StoredStudySession session;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final start = session.scheduledStart.toLocal();
+    final duration = session.scheduledEnd.difference(session.scheduledStart);
+    final icon = switch (session.type) {
+      'review' => Icons.menu_book_outlined,
+      'practice' => Icons.edit_note_rounded,
+      'break' => Icons.coffee_outlined,
+      _ => Icons.school_outlined,
+    };
+    final iconColor = switch (session.type) {
+      'review' => const Color(0xFF0D1846),
+      'practice' => const Color(0xFF406EB7),
+      'break' => const Color(0xFFE95623),
+      _ => const Color(0xFF075E9D),
+    };
+    final iconBackgroundColor = switch (session.type) {
+      'review' => const Color(0xFFE7E9F0),
+      'practice' => const Color(0xFFE7EEF9),
+      'break' => const Color(0xFFFDE9E1),
+      _ => const Color(0xFFDDEEFF),
+    };
+    final title = session.notes?.trim().isNotEmpty == true
+        ? session.notes!.trim()
+        : '${session.type[0].toUpperCase()}${session.type.substring(1)} study';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
@@ -535,7 +633,9 @@ class _SessionTile extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  subtitle,
+                  session.status == 'planned'
+                      ? 'Planned study session'
+                      : session.status,
                   style: TextStyle(
                     color: isDark
                         ? const Color(0xFFB7C1CF)
@@ -551,7 +651,9 @@ class _SessionTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                time,
+                MaterialLocalizations.of(
+                  context,
+                ).formatTimeOfDay(TimeOfDay.fromDateTime(start)),
                 style: const TextStyle(
                   color: Color(0xFF006CC5),
                   fontSize: 14,
@@ -560,7 +662,7 @@ class _SessionTile extends StatelessWidget {
               ),
               const SizedBox(height: 3),
               Text(
-                duration,
+                '${duration.inMinutes} mins',
                 style: TextStyle(
                   color: isDark
                       ? const Color(0xFFB7C1CF)
@@ -576,23 +678,126 @@ class _SessionTile extends StatelessWidget {
   }
 }
 
-class _PriorityTasksCard extends StatelessWidget {
-  const _PriorityTasksCard({
-    required this.completedTasks,
-    required this.onTaskChanged,
-  });
-  final Set<int> completedTasks;
-  final void Function(int index, bool? value) onTaskChanged;
+class _DashboardEmptyMessage extends StatelessWidget {
+  const _DashboardEmptyMessage({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 12),
+    child: Text(
+      message,
+      style: TextStyle(
+        color: Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFFB7C1CF)
+            : const Color(0xFF687384),
+        fontSize: 13,
+      ),
+    ),
+  );
+}
+
+class _DeadlineBanner extends StatelessWidget {
+  const _DeadlineBanner({required this.task});
+
+  final StoredTask task;
 
   @override
   Widget build(BuildContext context) {
-    const tasks = [
-      'Complete Physics Lab Report',
-      'Read Chapter 4 of Sociology',
-      'Submit French Essay',
-    ];
+    final dueDate = task.dueDate!.toLocal();
+    final today = DateUtils.dateOnly(DateTime.now());
+    final dueDay = DateUtils.dateOnly(dueDate);
+    final daysUntil = dueDay.difference(today).inDays;
+    final timeLabel = switch (daysUntil) {
+      < 0 => 'Overdue',
+      0 => 'Due today',
+      1 => 'Due tomorrow',
+      _ => 'Due in $daysUntil days',
+    };
+    return Container(
+      height: 60,
+      padding: const EdgeInsets.symmetric(horizontal: 13),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1779D0),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'NEXT DEADLINE',
+                  style: TextStyle(
+                    color: Color(0xFFD5ECFF),
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: .6,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  task.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0x449BD1FF),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              timeLabel,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
+class _PriorityTasksCard extends StatelessWidget {
+  const _PriorityTasksCard({required this.tasks, required this.onTaskChanged});
+  final List<StoredTask> tasks;
+  final void Function(StoredTask task, bool selected) onTaskChanged;
+
+  @override
+  Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final openTasks = tasks.where((task) => task.status != 'done').toList()
+      ..sort((first, second) {
+        const priorityOrder = {'urgent': 0, 'high': 1, 'medium': 2, 'low': 3};
+        final priorityComparison = (priorityOrder[first.priority] ?? 4)
+            .compareTo(priorityOrder[second.priority] ?? 4);
+        if (priorityComparison != 0) return priorityComparison;
+        return (first.dueDate ?? DateTime(9999)).compareTo(
+          second.dueDate ?? DateTime(9999),
+        );
+      });
+    StoredTask? nextDeadline;
+    for (final task in openTasks) {
+      if (task.dueDate != null) {
+        nextDeadline = task;
+        break;
+      }
+    }
 
     return _DashboardCard(
       child: Column(
@@ -607,69 +812,21 @@ class _PriorityTasksCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 13),
-          for (var index = 0; index < tasks.length; index++)
-            _TaskRow(
-              label: tasks[index],
-              complete: completedTasks.contains(index),
-              onChanged: (value) => onTaskChanged(index, value),
-            ),
-          const SizedBox(height: 16),
-          Container(
-            height: 60,
-            padding: const EdgeInsets.symmetric(horizontal: 13),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1779D0),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                const Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'NEXT DEADLINE',
-                        style: TextStyle(
-                          color: Color(0xFFD5ECFF),
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: .6,
-                        ),
-                      ),
-                      SizedBox(height: 1),
-                      Text(
-                        'Final Project',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0x449BD1FF),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    '2 Days Left',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          if (openTasks.isEmpty)
+            const _DashboardEmptyMessage(
+              message: 'No priority tasks. Add one from the Tasks tab.',
+            )
+          else ...[
+            for (final task in openTasks.take(3))
+              _TaskRow(
+                task: task,
+                onChanged: (value) => onTaskChanged(task, value ?? false),
+              ),
+            if (nextDeadline != null) ...[
+              const SizedBox(height: 16),
+              _DeadlineBanner(task: nextDeadline),
+            ],
+          ],
         ],
       ),
     );
@@ -677,13 +834,8 @@ class _PriorityTasksCard extends StatelessWidget {
 }
 
 class _TaskRow extends StatelessWidget {
-  const _TaskRow({
-    required this.label,
-    required this.complete,
-    required this.onChanged,
-  });
-  final String label;
-  final bool complete;
+  const _TaskRow({required this.task, required this.onChanged});
+  final StoredTask task;
   final ValueChanged<bool?> onChanged;
 
   @override
@@ -697,7 +849,7 @@ class _TaskRow extends StatelessWidget {
           SizedBox(
             width: 27,
             child: Checkbox(
-              value: complete,
+              value: task.status == 'done',
               onChanged: onChanged,
               activeColor: const Color(0xFF0567B9),
               side: const BorderSide(color: Color(0xFF9EA9B9)),
@@ -709,15 +861,17 @@ class _TaskRow extends StatelessWidget {
           const SizedBox(width: 7),
           Expanded(
             child: Text(
-              label,
+              task.title,
               style: TextStyle(
-                color: complete
+                color: task.status == 'done'
                     ? const Color(0xFF9EAAB9)
                     : isDark
                     ? const Color(0xFFE7EDF5)
                     : const Color(0xFF30343B),
                 fontSize: 13,
-                decoration: complete ? TextDecoration.lineThrough : null,
+                decoration: task.status == 'done'
+                    ? TextDecoration.lineThrough
+                    : null,
               ),
             ),
           ),

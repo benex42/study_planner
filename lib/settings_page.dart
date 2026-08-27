@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'auth_service.dart';
 import 'floating_tab_bar.dart';
+import 'network_loading.dart';
 
 /// The account and app-preferences area of StudyHub.
 class SettingsPage extends StatefulWidget {
@@ -39,6 +41,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final user = AuthScope.of(context).user;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final surface = isDark ? const Color(0xFF1B222C) : Colors.white;
     final background = isDark
@@ -67,6 +70,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     surface: surface,
                     primary: primary,
                     secondary: secondary,
+                    user: user,
                   ),
                   const SizedBox(height: 18),
                   _SettingsSection(
@@ -175,9 +179,18 @@ class _SettingsPageState extends State<SettingsPage> {
                   SizedBox(
                     height: 44,
                     child: OutlinedButton.icon(
-                      onPressed: () => Navigator.of(
-                        context,
-                      ).pushNamedAndRemoveUntil('/login', (route) => false),
+                      onPressed: () async {
+                        final networkActivity = NetworkLoadingScope.of(context);
+                        final auth = AuthScope.of(context);
+                        final navigator = Navigator.of(context);
+                        await networkActivity.track(auth.signOut());
+                        if (mounted) {
+                          navigator.pushNamedAndRemoveUntil(
+                            '/login',
+                            (route) => false,
+                          );
+                        }
+                      },
                       icon: const Icon(Icons.logout_rounded, size: 18),
                       label: const Text('Logout'),
                       style: OutlinedButton.styleFrom(
@@ -259,11 +272,13 @@ class _ProfileCard extends StatelessWidget {
     required this.surface,
     required this.primary,
     required this.secondary,
+    required this.user,
   });
 
   final Color surface;
   final Color primary;
   final Color secondary;
+  final AuthUser? user;
 
   @override
   Widget build(BuildContext context) {
@@ -307,7 +322,7 @@ class _ProfileCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Aaron Rivers',
+                  user?.name ?? 'StudyHub User',
                   style: TextStyle(
                     color: primary,
                     fontSize: 18,
@@ -316,7 +331,7 @@ class _ProfileCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 5),
                 Text(
-                  'aaron.rivers@university.edu',
+                  user?.email ?? '',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: secondary, fontSize: 13),

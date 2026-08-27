@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
-import 'floating_tab_bar.dart';
+import 'auth_service.dart';
 import 'auth_widgets.dart';
+import 'floating_tab_bar.dart';
+import 'network_loading.dart';
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({
@@ -19,10 +21,10 @@ class SignUpPage extends StatefulWidget {
 
 class _SignUpPageState extends State<SignUpPage> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController(text: 'Aaron Rivers');
-  final _emailController = TextEditingController(text: 'aaron@university.edu');
-  final _passwordController = TextEditingController(text: 'password');
-  final _confirmPasswordController = TextEditingController(text: 'password');
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   bool _acceptedTerms = false;
   bool _obscurePassword = true;
 
@@ -41,15 +43,53 @@ class _SignUpPageState extends State<SignUpPage> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  void _createAccount() {
+  Future<void> _createAccount() async {
     if (!_formKey.currentState!.validate()) return;
     if (!_acceptedTerms) {
       _showMessage('Please agree to the Terms of Service and Privacy Policy.');
       return;
     }
-    Navigator.of(
-      context,
-    ).pushNamedAndRemoveUntil('/dashboard', (route) => false);
+    try {
+      await NetworkLoadingScope.of(context).track(
+        AuthScope.of(context).signUp(
+          name: _nameController.text,
+          email: _emailController.text,
+          password: _passwordController.text,
+        ),
+      );
+      if (!mounted) return;
+      Navigator.of(
+        context,
+      ).pushNamedAndRemoveUntil('/dashboard', (route) => false);
+    } on AuthException catch (error) {
+      if (mounted) _showMessage(error.message);
+    } catch (_) {
+      if (mounted) {
+        _showMessage('Unable to create your account. Please try again.');
+      }
+    }
+  }
+
+  Future<void> _continueWithGoogle() =>
+      _completeSocialSignIn(AuthScope.of(context).signInWithGoogle);
+
+  Future<void> _continueWithApple() =>
+      _completeSocialSignIn(AuthScope.of(context).signInWithApple);
+
+  Future<void> _completeSocialSignIn(Future<void> Function() signIn) async {
+    try {
+      await NetworkLoadingScope.of(context).track(signIn());
+      if (!mounted) return;
+      Navigator.of(
+        context,
+      ).pushNamedAndRemoveUntil('/dashboard', (route) => false);
+    } on AuthException catch (error) {
+      if (mounted) _showMessage(error.message);
+    } catch (_) {
+      if (mounted) {
+        _showMessage('Unable to complete sign-in. Please try again.');
+      }
+    }
   }
 
   @override
@@ -104,10 +144,8 @@ class _SignUpPageState extends State<SignUpPage> {
                             );
                           },
                           onSignUp: _createAccount,
-                          onGoogle: () =>
-                              _showMessage('Continue with Google selected.'),
-                          onApple: () =>
-                              _showMessage('Continue with Apple selected.'),
+                          onGoogle: _continueWithGoogle,
+                          onApple: _continueWithApple,
                           onLogIn: () => Navigator.of(context).pop(),
                         ),
                       ],
@@ -230,8 +268,8 @@ class _SignUpCard extends StatelessWidget {
                 ),
               ),
               validator: (value) {
-                if (value == null || value.length < 6) {
-                  return 'Password must be at least 6 characters';
+                if (value == null || value.length < 8) {
+                  return 'Password must be at least 8 characters';
                 }
                 return null;
               },

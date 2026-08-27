@@ -1,13 +1,22 @@
 import 'package:flutter/material.dart';
 
+import 'auth_service.dart';
 import 'floating_tab_bar.dart';
+import 'network_loading.dart';
 import 'study_hub_app_bar.dart';
+import 'task_repository.dart';
 
 class TasksPage extends StatefulWidget {
-  const TasksPage({super.key, this.onThemeToggle, this.embedded = false});
+  const TasksPage({
+    super.key,
+    this.onThemeToggle,
+    this.embedded = false,
+    this.repository,
+  });
 
   final VoidCallback? onThemeToggle;
   final bool embedded;
+  final TaskRepository? repository;
 
   @override
   State<TasksPage> createState() => _TasksPageState();
@@ -15,44 +24,28 @@ class TasksPage extends StatefulWidget {
 
 class _TasksPageState extends State<TasksPage> {
   final _searchController = TextEditingController();
-  final Set<String> _completed = {'Lab Report: Distillation'};
-  final List<_TaskGroupData> _taskGroups = [
-    _TaskGroupData(
-      title: 'Advanced Mathematics',
-      accent: const Color(0xFF066ABB),
-      total: 4,
-      tasks: [
-        const _TaskData(
-          'Complete Fourier Series',
-          'Oct 24, 2023   •   15:00',
-          'HIGH',
-        ),
-        const _TaskData('Matrix Calculus Problems', 'Oct 26, 2023', 'MEDIUM'),
-      ],
-    ),
-    _TaskGroupData(
-      title: 'Organic Chemistry',
-      accent: const Color(0xFF2F718E),
-      total: 2,
-      tasks: [
-        const _TaskData('Lab Report: Distillation', 'Completed', 'LOW'),
-        const _TaskData('Mechanism Exercise', 'Today', 'HIGH'),
-      ],
-    ),
-    _TaskGroupData(
-      title: 'Modern Philosophy',
-      accent: const Color(0xFF50616C),
-      total: 1,
-      tasks: [
-        const _TaskData(
-          "Essay: Kant's Categorical Imperative",
-          'Oct 30, 2023',
-          'MEDIUM',
-        ),
-      ],
-    ),
-  ];
+  final Set<String> _completed = {};
+  late final TaskRepository _repository;
+  String? _loadedToken;
+  final List<_TaskGroupData> _taskGroups = [];
   String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _repository = widget.repository ?? ApiTaskRepository();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final authScope = context.dependOnInheritedWidgetOfExactType<AuthScope>();
+    final token = authScope?.notifier?.accessToken;
+    if (token != null && token != _loadedToken) {
+      _loadedToken = token;
+      _loadTasks(token);
+    }
+  }
 
   @override
   void dispose() {
@@ -66,9 +59,6 @@ class _TasksPageState extends State<TasksPage> {
       builder: (dialogContext) => _AddTaskDialog(
         onSaved: (task) {
           _saveTask(task);
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('${task.subject} added.')));
         },
       ),
     );
@@ -98,20 +88,26 @@ class _TasksPageState extends State<TasksPage> {
                     setState(() => _query = value.toLowerCase()),
               ),
               const SizedBox(height: 23),
-              const _TaskSummaryCards(),
-              const SizedBox(height: 22),
-              ..._taskGroups.map(
-                (group) => _SubjectGroup(
-                  title: group.title,
-                  accent: group.accent,
-                  total: group.total,
-                  tasks: group.tasks,
-                  query: _query,
-                  completed: _completed,
-                  isDark: isDark,
-                  onChanged: _setTaskCompletion,
-                ),
+              _TaskSummaryCards(
+                tasks: _taskGroups.expand((group) => group.tasks),
+                completed: _completed,
               ),
+              const SizedBox(height: 22),
+              if (_taskGroups.isEmpty)
+                _EmptyTaskState(isDark: isDark, onAddTask: _addTask)
+              else
+                ..._taskGroups.map(
+                  (group) => _SubjectGroup(
+                    title: group.title,
+                    accent: group.accent,
+                    total: group.total,
+                    tasks: group.tasks,
+                    query: _query,
+                    completed: _completed,
+                    isDark: isDark,
+                    onChanged: _setTaskCompletion,
+                  ),
+                ),
             ],
           ),
         ),
@@ -157,17 +153,133 @@ class _TasksPageState extends State<TasksPage> {
     );
   }
 
-  void _setTaskCompletion(String title, bool selected) {
-    setState(() {
-      if (selected) {
-        _completed.add(title);
-      } else {
-        _completed.remove(title);
-      }
-    });
+  Future<T> _trackRequest<T>(Future<T> request) {
+    final loadingScope = context
+        .dependOnInheritedWidgetOfExactType<NetworkLoadingScope>();
+    return loadingScope?.notifier?.track(request) ?? request;
   }
 
-  void _saveTask(_NewTaskInput task) {
+  Future<void> _loadTasks(String token) async {
+    try {
+      final tasks = await _trackRequest(_repository.fetchTasks(token));
+      if (!mounted || token != _loadedToken) return;
+      setState(() {
+        _taskGroups
+          ..clear()
+          ..addAll(_groupsFor(tasks));
+        _completed
+          ..clear()
+          ..addAll(
+            tasks.where((task) => task.status == 'done').map((task) => task.id),
+          );
+      });
+    } on TaskRepositoryException catch (error) {
+      if (mounted) _showMessage(error.message);
+    }
+  }
+
+  List<_TaskGroupData> _groupsFor(List<StoredTask> tasks) {
+    const accents = [
+      Color(0xFF066ABB),
+      Color(0xFF2F718E),
+      Color(0xFF50616C),
+      Color(0xFF8057A9),
+    ];
+    final groups = <_TaskGroupData>[];
+    for (final task in tasks) {
+      final groupIndex = groups.indexWhere(
+        (group) => group.title.toLowerCase() == task.course.toLowerCase(),
+      );
+      final taskData = _TaskData.fromStoredTask(task, context);
+      if (groupIndex >= 0) {
+        groups[groupIndex].tasks.add(taskData);
+        groups[groupIndex].total++;
+      } else {
+        groups.add(
+          _TaskGroupData(
+            title: task.course,
+            accent: accents[groups.length % accents.length],
+            total: 1,
+            tasks: [taskData],
+          ),
+        );
+      }
+    }
+    return groups;
+  }
+
+  Future<void> _setTaskCompletion(_TaskData task, bool selected) async {
+    final key = task.key;
+    setState(() {
+      if (selected) {
+        _completed.add(key);
+      } else {
+        _completed.remove(key);
+      }
+    });
+
+    if (task.id == null) return;
+    final token = context
+        .dependOnInheritedWidgetOfExactType<AuthScope>()
+        ?.notifier
+        ?.accessToken;
+    if (token == null) return;
+    try {
+      await _trackRequest(
+        _repository.updateStatus(token, task.id!, selected ? 'done' : 'todo'),
+      );
+    } on TaskRepositoryException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        if (selected) {
+          _completed.remove(key);
+        } else {
+          _completed.add(key);
+        }
+      });
+      _showMessage(error.message);
+    }
+  }
+
+  Future<void> _saveTask(_NewTaskInput task) async {
+    final token = context
+        .dependOnInheritedWidgetOfExactType<AuthScope>()
+        ?.notifier
+        ?.accessToken;
+    if (token == null) {
+      _showMessage('Sign in to save tasks to your account.');
+      return;
+    }
+    try {
+      final savedTask = await _trackRequest(
+        _repository.createTask(
+          token,
+          TaskDraft(
+            course: task.course,
+            title: task.subject,
+            priority: task.importance,
+            dueDate: task.dueDate,
+          ),
+        ),
+      );
+      if (!mounted) return;
+      _saveTaskLocally(
+        _TaskData.fromStoredTask(savedTask, context),
+        task.course,
+      );
+      _showMessage('${task.subject} saved.');
+    } on TaskRepositoryException catch (error) {
+      if (mounted) _showMessage(error.message);
+    }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _saveTaskLocally(_TaskData taskData, String course) {
     const accents = [
       Color(0xFF066ABB),
       Color(0xFF2F718E),
@@ -176,16 +288,15 @@ class _TasksPageState extends State<TasksPage> {
     ];
     setState(() {
       final groupIndex = _taskGroups.indexWhere(
-        (group) => group.title.toLowerCase() == task.course.toLowerCase(),
+        (group) => group.title.toLowerCase() == course.toLowerCase(),
       );
-      final taskData = _TaskData(task.subject, task.detail, task.importance);
       if (groupIndex >= 0) {
         _taskGroups[groupIndex].tasks.add(taskData);
         _taskGroups[groupIndex].total++;
       } else {
         _taskGroups.add(
           _TaskGroupData(
-            title: task.course,
+            title: course,
             accent: accents[_taskGroups.length % accents.length],
             total: 1,
             tasks: [taskData],
@@ -365,6 +476,15 @@ class _AddTaskDialogState extends State<_AddTaskDialog> {
                             date,
                             time,
                           ].whereType<String>().join('   •   ');
+                          final dueDate = _date == null
+                              ? null
+                              : DateTime(
+                                  _date!.year,
+                                  _date!.month,
+                                  _date!.day,
+                                  _time?.hour ?? 0,
+                                  _time?.minute ?? 0,
+                                );
                           Navigator.of(context).pop();
                           widget.onSaved(
                             _NewTaskInput(
@@ -372,6 +492,7 @@ class _AddTaskDialogState extends State<_AddTaskDialog> {
                               subject: _subjectController.text.trim(),
                               detail: detail.isEmpty ? 'No due date' : detail,
                               importance: _importance.toUpperCase(),
+                              dueDate: dueDate,
                             ),
                           );
                         },
@@ -460,28 +581,47 @@ class _TaskSearchField extends StatelessWidget {
 }
 
 class _TaskSummaryCards extends StatelessWidget {
-  const _TaskSummaryCards();
+  const _TaskSummaryCards({required this.tasks, required this.completed});
+
+  final Iterable<_TaskData> tasks;
+  final Set<String> completed;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final taskList = tasks.toList();
+    final dueToday = taskList.where((task) {
+      final dueDate = task.dueDate;
+      return dueDate != null && DateUtils.isSameDay(dueDate, DateTime.now());
+    }).length;
+    final completedCount = taskList
+        .where((task) => completed.contains(task.key))
+        .length;
+    final completionRate = taskList.isEmpty
+        ? 0.0
+        : completedCount / taskList.length;
     return Column(
       children: [
         _SummaryCard(
           title: 'Total Tasks',
           icon: Icons.assignment_outlined,
           isDark: isDark,
-          child: const Column(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '24',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                '${taskList.length}',
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
-              SizedBox(height: 4),
+              const SizedBox(height: 4),
               Text(
-                '+4 from yesterday',
-                style: TextStyle(color: Color(0xFF788292), fontSize: 15),
+                taskList.isEmpty
+                    ? 'Start by adding your first task'
+                    : 'Across all courses',
+                style: const TextStyle(color: Color(0xFF788292), fontSize: 15),
               ),
             ],
           ),
@@ -492,21 +632,21 @@ class _TaskSummaryCards extends StatelessWidget {
           icon: Icons.event_busy_outlined,
           urgent: true,
           isDark: isDark,
-          child: const Column(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '03',
-                style: TextStyle(
+                dueToday.toString().padLeft(2, '0'),
+                style: const TextStyle(
                   color: Color(0xFFD31D28),
                   fontSize: 17,
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
               Text(
-                'Submit by 11:59 PM',
-                style: TextStyle(color: Color(0xFFBD2930), fontSize: 15),
+                dueToday == 0 ? 'Nothing due today' : 'Due before the day ends',
+                style: const TextStyle(color: Color(0xFFBD2930), fontSize: 15),
               ),
             ],
           ),
@@ -516,18 +656,21 @@ class _TaskSummaryCards extends StatelessWidget {
           title: 'Completion Rate',
           icon: Icons.analytics_outlined,
           isDark: isDark,
-          child: const Column(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '78%',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                '${(completionRate * 100).round()}%',
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
-              SizedBox(height: 12),
+              const SizedBox(height: 12),
               ClipRRect(
-                borderRadius: BorderRadius.all(Radius.circular(4)),
+                borderRadius: const BorderRadius.all(Radius.circular(4)),
                 child: LinearProgressIndicator(
-                  value: .78,
+                  value: completionRate,
                   minHeight: 7,
                   color: Color(0xFF0569BC),
                   backgroundColor: Color(0xFFBCE1FC),
@@ -539,6 +682,59 @@ class _TaskSummaryCards extends StatelessWidget {
       ],
     );
   }
+}
+
+class _EmptyTaskState extends StatelessWidget {
+  const _EmptyTaskState({required this.isDark, required this.onAddTask});
+
+  final bool isDark;
+  final VoidCallback onAddTask;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 36),
+    decoration: BoxDecoration(
+      color: isDark ? const Color(0xFF1C2530) : Colors.white,
+      borderRadius: appSurfaceBorderRadius,
+      border: Border.all(
+        color: isDark ? const Color(0xFF3B4757) : const Color(0xFFCBD3DE),
+        width: .5,
+      ),
+    ),
+    child: Column(
+      children: [
+        const Icon(
+          Icons.assignment_outlined,
+          size: 42,
+          color: Color(0xFF0569BC),
+        ),
+        const SizedBox(height: 14),
+        Text(
+          'No tasks yet',
+          style: TextStyle(
+            color: isDark ? Colors.white : const Color(0xFF25282D),
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Add a task to plan your study work.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: isDark ? const Color(0xFFB8C2D0) : const Color(0xFF778191),
+          ),
+        ),
+        const SizedBox(height: 18),
+        FilledButton.icon(
+          onPressed: onAddTask,
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('Add your first task'),
+        ),
+      ],
+    ),
+  );
 }
 
 class _SummaryCard extends StatelessWidget {
@@ -628,10 +824,41 @@ class _UrgentPill extends StatelessWidget {
 }
 
 class _TaskData {
-  const _TaskData(this.title, this.detail, this.priority);
+  const _TaskData(
+    this.title,
+    this.detail,
+    this.priority, {
+    this.id,
+    this.dueDate,
+  });
+
+  factory _TaskData.fromStoredTask(StoredTask task, BuildContext context) {
+    final dueDate = task.dueDate?.toLocal();
+    final detail = dueDate == null
+        ? 'No due date'
+        : [
+            MaterialLocalizations.of(context).formatMediumDate(dueDate),
+            if (dueDate.hour != 0 || dueDate.minute != 0)
+              MaterialLocalizations.of(
+                context,
+              ).formatTimeOfDay(TimeOfDay.fromDateTime(dueDate)),
+          ].join('   •   ');
+    return _TaskData(
+      task.title,
+      detail,
+      task.priority.toUpperCase(),
+      id: task.id,
+      dueDate: dueDate,
+    );
+  }
+
+  final String? id;
+  final DateTime? dueDate;
   final String title;
   final String detail;
   final String priority;
+
+  String get key => id ?? title;
 }
 
 class _TaskGroupData {
@@ -654,12 +881,14 @@ class _NewTaskInput {
     required this.subject,
     required this.detail,
     required this.importance,
+    this.dueDate,
   });
 
   final String course;
   final String subject;
   final String detail;
   final String importance;
+  final DateTime? dueDate;
 }
 
 class _SubjectGroup extends StatelessWidget {
@@ -680,7 +909,7 @@ class _SubjectGroup extends StatelessWidget {
   final String query;
   final Set<String> completed;
   final bool isDark;
-  final void Function(String, bool) onChanged;
+  final void Function(_TaskData, bool) onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -736,9 +965,9 @@ class _SubjectGroup extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 12),
               child: _TaskTile(
                 task: task,
-                complete: completed.contains(task.title),
+                complete: completed.contains(task.key),
                 isDark: isDark,
-                onChanged: (value) => onChanged(task.title, value),
+                onChanged: (value) => onChanged(task, value),
               ),
             ),
           ),

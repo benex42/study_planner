@@ -129,7 +129,6 @@ class _NetworkLoadingSplash extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 16),
-              
               ],
             ),
           ),

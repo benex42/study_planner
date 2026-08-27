@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'auth_service.dart';
 import 'focus_page.dart';
 import 'floating_tab_bar.dart';
 import 'login_page.dart';
@@ -8,7 +9,9 @@ import 'launch_splash.dart';
 import 'network_loading.dart';
 import 'schedule_page.dart';
 import 'study_hub_app_bar.dart';
+import 'study_session_repository.dart';
 import 'task_page.dart';
+import 'task_repository.dart';
 
 part 'dashboard_page.dart';
 
@@ -17,7 +20,9 @@ void main() {
 }
 
 class StudyHubApp extends StatefulWidget {
-  const StudyHubApp({super.key});
+  const StudyHubApp({super.key, this.authController});
+
+  final AuthController? authController;
 
   @override
   State<StudyHubApp> createState() => _StudyHubAppState();
@@ -27,10 +32,21 @@ class _StudyHubAppState extends State<StudyHubApp> {
   ThemeMode _themeMode = ThemeMode.system;
   final NetworkActivityController _networkActivity =
       NetworkActivityController();
+  late final AuthController _authController;
+  late final bool _ownsAuthController;
+
+  @override
+  void initState() {
+    super.initState();
+    _ownsAuthController = widget.authController == null;
+    _authController = widget.authController ?? AuthController();
+    _authController.initialize();
+  }
 
   @override
   void dispose() {
     _networkActivity.dispose();
+    if (_ownsAuthController) _authController.dispose();
     super.dispose();
   }
 
@@ -56,9 +72,12 @@ class _StudyHubAppState extends State<StudyHubApp> {
         ),
       ),
       themeMode: _themeMode,
-      builder: (context, child) => NetworkLoadingScope(
-        controller: _networkActivity,
-        child: NetworkLoadingOverlay(child: child ?? const SizedBox.shrink()),
+      builder: (context, child) => AuthScope(
+        controller: _authController,
+        child: NetworkLoadingScope(
+          controller: _networkActivity,
+          child: NetworkLoadingOverlay(child: child ?? const SizedBox.shrink()),
+        ),
       ),
       routes: {
         '/login': (_) =>
@@ -95,24 +114,28 @@ class _AppLaunchGateState extends State<_AppLaunchGate> {
 
   @override
   Widget build(BuildContext context) {
-    final loginPage = LoginPage(
+    final auth = AuthScope.of(context);
+    if (!_hasFinishedLaunching) {
+      return LaunchSplash(
+        key: const ValueKey('launch-splash'),
+        onFinished: () {
+          if (mounted) setState(() => _hasFinishedLaunching = true);
+        },
+      );
+    }
+    if (auth.isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (auth.isAuthenticated) {
+      return DashboardPage(
+        themeMode: widget.themeMode,
+        onThemeModeChanged: widget.onThemeModeChanged,
+      );
+    }
+    return LoginPage(
       key: const ValueKey('login-page'),
       themeMode: widget.themeMode,
       onThemeModeChanged: widget.onThemeModeChanged,
-    );
-
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        IgnorePointer(ignoring: !_hasFinishedLaunching, child: loginPage),
-        if (!_hasFinishedLaunching)
-          LaunchSplash(
-            key: const ValueKey('launch-splash'),
-            onFinished: () {
-              if (mounted) setState(() => _hasFinishedLaunching = true);
-            },
-          ),
-      ],
     );
   }
 }

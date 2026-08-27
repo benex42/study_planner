@@ -2,13 +2,90 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:study_planner/auth_service.dart';
 import 'package:study_planner/network_loading.dart';
 import 'package:study_planner/main.dart';
 import 'package:study_planner/schedule_page.dart';
 import 'package:study_planner/floating_tab_bar.dart';
+import 'package:study_planner/task_page.dart';
+import 'package:study_planner/task_repository.dart';
 
 Future<void> finishAppLaunch(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 2200));
+  await tester.pumpAndSettle();
+}
+
+class _FakeAuthRepository implements AuthRepository {
+  AuthSession _sessionFor({String name = 'Aaron Rivers'}) => AuthSession(
+    token: 'test-token',
+    user: AuthUser(id: 'test-user', name: name, email: 'aaron@university.edu'),
+  );
+
+  @override
+  Future<AuthSession?> restoreSession() async => null;
+
+  @override
+  Future<AuthSession> signIn({
+    required String email,
+    required String password,
+  }) async => _sessionFor();
+
+  @override
+  Future<AuthSession> signUp({
+    required String name,
+    required String email,
+    required String password,
+  }) async => _sessionFor(name: name);
+
+  @override
+  Future<void> signOut() async {}
+}
+
+class _FakeTaskRepository implements TaskRepository {
+  TaskDraft? savedDraft;
+
+  @override
+  Future<StoredTask> createTask(String accessToken, TaskDraft draft) async {
+    savedDraft = draft;
+    return StoredTask(
+      id: 'saved-task',
+      course: draft.course,
+      title: draft.title,
+      priority: draft.priority.toLowerCase(),
+      status: 'todo',
+      dueDate: draft.dueDate,
+    );
+  }
+
+  @override
+  Future<List<StoredTask>> fetchTasks(String accessToken) async => [];
+
+  @override
+  Future<StoredTask> updateStatus(
+    String accessToken,
+    String taskId,
+    String status,
+  ) async => const StoredTask(
+    id: 'saved-task',
+    course: 'Computer Science',
+    title: 'Build API',
+    priority: 'medium',
+    status: 'done',
+  );
+}
+
+Widget testApp() {
+  final authController = AuthController(repository: _FakeAuthRepository());
+  return StudyHubApp(authController: authController);
+}
+
+Future<void> logIn(WidgetTester tester) async {
+  await tester.enterText(
+    find.byType(TextFormField).at(0),
+    'aaron@university.edu',
+  );
+  await tester.enterText(find.byType(TextFormField).at(1), 'password123');
+  await tester.tap(find.text('Log In'));
   await tester.pumpAndSettle();
 }
 
@@ -52,7 +129,7 @@ void main() {
   });
 
   testWidgets('renders the StudyHub login page', (WidgetTester tester) async {
-    await tester.pumpWidget(const StudyHubApp());
+    await tester.pumpWidget(testApp());
     expect(find.bySemanticsLabel('Opening StudyHub'), findsOneWidget);
     await finishAppLaunch(tester);
 
@@ -66,11 +143,10 @@ void main() {
   testWidgets('changes theme preferences from Settings', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const StudyHubApp());
+    await tester.pumpWidget(testApp());
     await finishAppLaunch(tester);
 
-    await tester.tap(find.text('Log In'));
-    await tester.pumpAndSettle();
+    await logIn(tester);
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
@@ -102,7 +178,7 @@ void main() {
   testWidgets('opens the create-account page from Sign Up', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const StudyHubApp());
+    await tester.pumpWidget(testApp());
     await finishAppLaunch(tester);
 
     final signUp = find.text('Sign Up');
@@ -125,7 +201,7 @@ void main() {
   testWidgets('requires matching passwords when creating an account', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const StudyHubApp());
+    await tester.pumpWidget(testApp());
     await finishAppLaunch(tester);
 
     final signUp = find.text('Sign Up');
@@ -137,7 +213,7 @@ void main() {
     await tester.ensureVisible(confirmationField);
     await tester.enterText(confirmationField, 'different');
 
-    final createAccount = find.text('Sign Up');
+    final createAccount = find.widgetWithText(ElevatedButton, 'Sign Up');
     await tester.ensureVisible(createAccount);
     await tester.tap(createAccount);
     await tester.pump();
@@ -148,24 +224,76 @@ void main() {
   testWidgets('opens the dashboard after creating an account', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const StudyHubApp());
+    final authController = AuthController(repository: _FakeAuthRepository());
+    await tester.pumpWidget(StudyHubApp(authController: authController));
     await finishAppLaunch(tester);
 
-    final signUpPrompt = find.text('Sign Up');
-    await tester.ensureVisible(signUpPrompt);
-    await tester.tap(signUpPrompt);
-    await tester.pumpAndSettle();
-
-    final termsCheckbox = find.byType(Checkbox);
-    await tester.ensureVisible(termsCheckbox);
-    await tester.tap(termsCheckbox);
-    await tester.pumpAndSettle();
-    final createAccount = find.text('Sign Up');
-    await tester.ensureVisible(createAccount);
-    await tester.tap(createAccount);
+    await authController.signUp(
+      name: 'Aaron Rivers',
+      email: 'aaron@university.edu',
+      password: 'password123',
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Let’s become\nmore Productive, Aaron'), findsOneWidget);
+  });
+
+  testWidgets(
+    'uses the authenticated user first name in the dashboard greeting',
+    (WidgetTester tester) async {
+      final authController = AuthController(repository: _FakeAuthRepository());
+      await tester.pumpWidget(StudyHubApp(authController: authController));
+      await finishAppLaunch(tester);
+
+      await authController.signUp(
+        name: 'Maya Chen',
+        email: 'maya@example.com',
+        password: 'password123',
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Let’s become\nmore Productive, Maya'), findsOneWidget);
+    },
+  );
+
+  test('uses Aaron when a dashboard user name is unavailable', () {
+    expect(dashboardFirstName(null), 'Aaron');
+    expect(dashboardFirstName('  '), 'Aaron');
+  });
+
+  testWidgets('saves a newly entered task through the task repository', (
+    WidgetTester tester,
+  ) async {
+    final authController = AuthController(repository: _FakeAuthRepository());
+    final taskRepository = _FakeTaskRepository();
+    await authController.signIn(
+      email: 'aaron@university.edu',
+      password: 'password123',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AuthScope(
+          controller: authController,
+          child: TasksPage(repository: taskRepository),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Add task'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextFormField).at(0),
+      'Computer Science',
+    );
+    await tester.enterText(find.byType(TextFormField).at(1), 'Build API');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(taskRepository.savedDraft?.course, 'Computer Science');
+    expect(taskRepository.savedDraft?.title, 'Build API');
+    expect(find.text('Build API'), findsOneWidget);
   });
 
   testWidgets('renders the dashboard overview', (WidgetTester tester) async {
@@ -195,6 +323,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Total Tasks'), findsOneWidget);
+    expect(find.text('No tasks yet'), findsOneWidget);
+    expect(find.text('Complete Fourier Series'), findsNothing);
     expect(find.byType(FloatingTabBar), findsOneWidget);
   });
 

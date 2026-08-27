@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'auth_service.dart';
 import 'auth_widgets.dart';
 import 'floating_tab_bar.dart';
 import 'network_loading.dart';
@@ -19,10 +20,8 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _emailController = TextEditingController(
-    text: 'aaron.rivers@university.edu',
-  );
-  final _passwordController = TextEditingController(text: 'password');
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _obscurePassword = true;
 
@@ -43,21 +42,41 @@ class _LoginPageState extends State<LoginPage> {
     if (!_formKey.currentState!.validate()) return;
 
     try {
-      await NetworkLoadingScope.of(context).track(_authenticate());
+      await NetworkLoadingScope.of(context).track(
+        AuthScope.of(context).signIn(
+          email: _emailController.text,
+          password: _passwordController.text,
+        ),
+      );
       if (!mounted) return;
       Navigator.of(context).pushReplacementNamed('/dashboard');
-    } catch (_) {
+    } on AuthException catch (error) {
       if (mounted) {
-        _showMessage('Unable to sign in. Please try again.');
+        _showMessage(error.message);
       }
+    } catch (_) {
+      if (mounted) _showMessage('Unable to sign in. Please try again.');
     }
   }
 
-  Future<void> _authenticate() async {
-    // Replace this with the app's authentication/API call. Keeping this
-    // asynchronous mirrors a backend request and makes the loading lifecycle
-    // explicit for the current demo flow.
-    await Future<void>.delayed(const Duration(milliseconds: 700));
+  Future<void> _continueWithGoogle() =>
+      _completeSocialSignIn(AuthScope.of(context).signInWithGoogle);
+
+  Future<void> _continueWithApple() =>
+      _completeSocialSignIn(AuthScope.of(context).signInWithApple);
+
+  Future<void> _completeSocialSignIn(Future<void> Function() signIn) async {
+    try {
+      await NetworkLoadingScope.of(context).track(signIn());
+      if (!mounted) return;
+      Navigator.of(context).pushReplacementNamed('/dashboard');
+    } on AuthException catch (error) {
+      if (mounted) _showMessage(error.message);
+    } catch (_) {
+      if (mounted) {
+        _showMessage('Unable to complete sign-in. Please try again.');
+      }
+    }
   }
 
   @override
@@ -109,10 +128,8 @@ class _LoginPageState extends State<LoginPage> {
                           onLogin: _logIn,
                           onForgotPassword: () =>
                               _showMessage('Password recovery is on its way.'),
-                          onGoogle: () =>
-                              _showMessage('Continue with Google selected.'),
-                          onApple: () =>
-                              _showMessage('Continue with Apple selected.'),
+                          onGoogle: _continueWithGoogle,
+                          onApple: _continueWithApple,
                         ),
                         SizedBox(height: isCompact ? 27 : 34),
                         _SignUpPrompt(
@@ -196,8 +213,8 @@ class _LoginCard extends StatelessWidget {
                 ),
               ),
               validator: (value) {
-                if (value == null || value.length < 6) {
-                  return 'Password must be at least 6 characters';
+                if (value == null || value.length < 8) {
+                  return 'Password must be at least 8 characters';
                 }
                 return null;
               },

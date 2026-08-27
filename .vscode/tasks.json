@@ -1,0 +1,30 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start local Study Planner API",
+      "type": "shell",
+      "command": "zsh",
+      "args": [
+        "${workspaceFolder}/../backend/scripts/start-if-needed.sh"
+      ],
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "study-planner-api",
+        "pattern": [
+          {
+            "regexp": "^$",
+            "file": 1,
+            "location": 2,
+            "message": 3
+          }
+        ],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "MongoDB connected|Study Planner API listening",
+          "endsPattern": "Study Planner API listening"
+        }
+      }
+    }
+  ]
+}

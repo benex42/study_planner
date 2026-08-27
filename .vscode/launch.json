@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Study Planner (iPhone + local API)",
+      "request": "launch",
+      "type": "dart",
+      "deviceId": "00008120-001C09C60268201E",
+      "preLaunchTask": "Start local Study Planner API",
+      "toolArgs": [
+        "--dart-define=API_BASE_URL=http://Benexs-MacBook-Pro.local:4000/api/v1",
+        "--dart-define=GOOGLE_IOS_CLIENT_ID=745679367775-smia2sgrdoqbalc2pqbp8e4p8dvmn4uf.apps.googleusercontent.com"
+      ]
+    }
+  ]
+}
